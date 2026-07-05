@@ -1,3 +1,5 @@
+from config import TELEGRAM_TOKEN, GROQ_API_KEY
+
 import logging
 import threading
 import json
@@ -5,28 +7,28 @@ import telebot
 import time
 from queue import Queue
 from groq import Groq
-import device_actions 
+
+import device_actions
 import memory_manager
-# 1. เพิ่มคำสั่ง import สำหรับทำระบบ Web API
+import tts
+
 from fastapi import FastAPI
 import uvicorn
 
-# 2. กล่องเก็บข้อมูลสุขภาพเรียลไทม์ของ Jarvis
+# ------------------
+# STATUS
+# ------------------
 JARVIS_LIVE_STATUS = {
-    "last_ai_latency_ms": 0,  # ความเร็ว AI ล่าสุด
-    "intent_ok": True,         # สมองยังแยกคำสั่งได้ไหม
-    "db_ok": True              # ฐานข้อมูลยังใช้งานได้ดีไหม
+    "last_ai_latency_ms": 0,
+    "intent_ok": True,
+    "db_ok": True
 }
 
-# (ถัดจากนี้ก็ปล่อยให้เป็นโค้ดเดิมของคุณยาวลงไปจนถึงฟังก์ชัน handle)
+logging.basicConfig(level=logging.ERROR)
 
-# 1. SETUP
-logging.basicConfig(level=logging.ERROR, format="%(levelname)s:%(name)s:%(message)s")
-API_TOKEN = "8863565201:AAFtQDDIYb5D3hH0VnFQGGkO87Jp3RLfeaY"
-GROQ_KEY = "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"
+bot = telebot.TeleBot(TELEGRAM_TOKEN)
+client = Groq(api_key=GROQ_API_KEY)
 
-bot = telebot.TeleBot(API_TOKEN)
-client = Groq(api_key=GROQ_KEY)
 task_queue = Queue()
 
 ACTION_MAP = {
@@ -34,79 +36,138 @@ ACTION_MAP = {
     "check_battery": device_actions.check_battery,
 }
 
-# 2. HELPER FUNCTIONS
+
+# ------------------
+# fallback intent
+# ------------------
 def fallback_intent(text):
-    text_lower = text.lower()
-    if "แบต" in text_lower or "battery" in text_lower: return "check_battery"
-    if "ยูทูป" in text_lower or "youtube" in text_lower: return "open_youtube"
+    text = text.lower()
+
+    if "แบต" in text or "battery" in text:
+        return "check_battery"
+
+    if "youtube" in text or "ยูทูป" in text:
+        return "open_youtube"
+
     return None
 
+
+# ------------------
+# AI
+# ------------------
 def ask_jarvis(user_message, history_text=""):
-    prompt = f"""คุณคือ Jarvis AI. กฎ: ตอบเป็น JSON เท่านั้น
-    {{ "reply": "ข้อความตอบกลับ", "action": "ชื่อคำสั่ง หรือ null" }}
-    ประวัติการสนทนา: {history_text}
-    คำถาม: {user_message}"""
-    
+    prompt = f"""
+You are Jarvis AI. Return ONLY valid JSON.
+
+Format:
+{{"reply":"", "action": null}}
+
+History:
+{history_text}
+
+User:
+{user_message}
+"""
+
     try:
-        response = client.chat.completions.create(
-            model="llama3-8b-8192",
+        res = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
             response_format={"type": "json_object"},
             messages=[{"role": "user", "content": prompt}]
         )
-        return json.loads(response.choices[0].message.content)
-    except:
-        return {"reply": None, "action": None}
 
-# 3. WORKER
+        return json.loads(res.choices[0].message.content)
+
+    except Exception as e:
+        print("AI Error:", e)
+        return {"reply": "ขออภัย ระบบ AI ขัดข้อง", "action": None}
+
+
+# ------------------
+# worker
+# ------------------
 def worker():
     while True:
         task = task_queue.get()
-        chat_id, text, history = task["chat_id"], task["text"], task["history"]
-        
-        history_text = "\n".join([f"User: {u}\nBot: {b}" for u, b in history])
-        result = ask_jarvis(text, history_text)
-        
-        action = result.get("action") or fallback_intent(text)
-        reply = result.get("reply") or "รับทราบครับ กำลังดำเนินการให้"
 
-        if action in ACTION_MAP:
-            res = ACTION_MAP[action]()
-            reply = f"🔧 {res}\n\n{reply}" if res else reply
-        
-        bot.send_message(chat_id, reply)
-        memory_manager.save_memory(text, reply)
-        task_queue.task_done()
+        reply = ""   # 🔥 กันพัง
 
-# 4. TELEGRAM HANDLER
-@bot.message_handler(func=lambda message: True)
-def handle(message):
-    history = memory_manager.get_memory(5)
-    task_queue.put({"chat_id": message.chat.id, "text": message.text, "history": history})
+        try:
+            chat_id = task["chat_id"]
+            text = task["text"]
+            history = task["history"]
 
-# สร้างตัวแปรแอป FastAPI สำหรับทำระบบตรวจชีพจร
+            history_text = "\n".join([f"U:{u} B:{b}" for u, b in history])
+
+            result = ask_jarvis(text, history_text)
+
+            action = result.get("action") or fallback_intent(text)
+            reply = result.get("reply") or "รับทราบ"
+
+            if action in ACTION_MAP:
+                try:
+                    reply = ACTION_MAP[action]()
+                except Exception as e:
+                    print("ACTION Error:", e)
+
+            bot.send_message(chat_id, reply)
+
+            # 🔊 TTS กันพัง
+            try:
+                tts.speak(reply)
+            except Exception as e:
+                print("TTS Error:", e)
+
+            # 🧠 memory กันพัง
+            try:
+                memory_manager.save_memory(text, reply)
+            except Exception as e:
+                print("Memory Error:", e)
+
+        except Exception as e:
+            print("Worker Error:", e)
+            print("DEBUG reply =", reply)
+
+        finally:
+            task_queue.task_done()
+
+
+# ------------------
+# telegram
+# ------------------
+@bot.message_handler(func=lambda m: True)
+def handle(m):
+    if not m.text:
+        return
+
+    task_queue.put({
+        "chat_id": m.chat.id,
+        "text": m.text,
+        "history": memory_manager.get_memory(5)
+    })
+
+
+# ------------------
+# fastapi
+# ------------------
 app = FastAPI()
 
 @app.get("/pulse")
 def pulse():
-    is_healthy = JARVIS_LIVE_STATUS["intent_ok"] and JARVIS_LIVE_STATUS["db_ok"]
     return {
-        "status": "ok" if is_healthy else "degraded",
-        "timestamp": time.time(),
-        "intent_ok": JARVIS_LIVE_STATUS["intent_ok"],
-        "queue_size": task_queue.qsize() if 'task_queue' in globals() else 0, # เช็กคิวงานจริง 📦
-        "ai_latency_ms": JARVIS_LIVE_STATUS["last_ai_latency_ms"],
-        "db_ok": JARVIS_LIVE_STATUS["db_ok"]
+        "status": "ok",
+        "queue": task_queue.qsize(),
+        "time": time.time()
     }
 
+
+# ------------------
+# start
+# ------------------
 if __name__ == "__main__":
-    # 1. เปิดสวิตช์ให้ Worker ทำงานหลังบ้าน (โค้ดเดิมของคุณ)
-    import threading
     threading.Thread(target=worker, daemon=True).start()
-    
-    # 2. ย้าย Telegram Bot ไปวิ่งในเลนของตัวเอง ไม่ให้บล็อกระบบเว็บ
     threading.Thread(target=bot.infinity_polling, daemon=True).start()
-    
-    print("🤖 Jarvis System & Telegram Bot Ready...")
-    
-    # 3. สั่งเปิดเครื่องหน้าบ้าน FastAPI ไว้คอยรายงานสุขภาพยาม
+
+    print("Jarvis started")
+
     uvicorn.run(app, host="127.0.0.1", port=8000)

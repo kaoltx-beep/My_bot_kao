@@ -2,28 +2,22 @@ import subprocess
 import json
 
 level = 0
-status = "กำลังตรวจสอบ"
+status = "unknown"
 
 def update():
     global level, status
+
     try:
-        # ดึงค่าสถานะแบตเตอรี่จริงจาก Android
-        result = subprocess.check_output(["termux-battery-status"], text=True)
-        data = json.loads(result)
-        
+        raw = subprocess.check_output(["termux-battery-status"], text=True)
+        data = json.loads(raw)
+
         level = data.get("percentage", 0)
-        raw_status = data.get("status")
 
-        if raw_status == "CHARGING":
-            status = "กำลังชาร์จ ⚡"
+        if data.get("status") == "CHARGING":
+            status = "charging"
         else:
-            status = "ไม่ได้ชาร์จ 🔋"
+            status = "discharging"
 
-        # แจ้งเตือนหากแบตเตอรี่ต่ำ
-        if level <= 20:
-            status += " ⚠️ (แบตเตอรี่ต่ำกว่า 20%)"
-            
-    except Exception:
-        status = "ไม่สามารถดึงข้อมูลระบบได้"
-
-
+    except Exception as e:
+        level = -1
+        status = f"error"
