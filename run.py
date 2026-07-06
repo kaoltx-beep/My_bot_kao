@@ -14,6 +14,7 @@ import tts
 
 from fastapi import FastAPI
 import uvicorn
+import os
 
 # ------------------
 # STATUS
@@ -170,4 +171,6 @@ if __name__ == "__main__":
 
     print("Jarvis started")
 
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    # Get port from environment or default to 8000
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
