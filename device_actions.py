@@ -8,5 +8,15 @@ def check_battery():
 
 
 def open_youtube():
-    os.system("termux-open https://youtube.com")
-    return "📺 เปิด YouTube แล้ว"
+    try:
+        result = os.system(
+            "am start -a android.intent.action.VIEW -d https://www.youtube.com"
+        )
+
+        if result == 0:
+            return "📺 เปิด YouTube แล้วครับนายท่าน"
+
+        return "❌ เปิด YouTube ไม่สำเร็จ"
+
+    except Exception as e:
+        return f"❌ เปิด YouTube ไม่สำเร็จ: {e}"

@@ -1,13 +1,13 @@
-from config import TELEGRAM_TOKEN, GROQ_API_KEY
-
-import logging
 import threading
-import json
-import telebot
 import time
+import logging
+import json
 from queue import Queue
+import telebot
 from groq import Groq
 
+# ดึงค่าจากไฟล์เดิมในระบบของพี่ ปลอดภัยไม่พังชัวร์
+import config
 import device_actions
 import memory_manager
 import tts
@@ -26,8 +26,8 @@ JARVIS_LIVE_STATUS = {
 
 logging.basicConfig(level=logging.ERROR)
 
-bot = telebot.TeleBot(TELEGRAM_TOKEN)
-client = Groq(api_key=GROQ_API_KEY)
+bot = telebot.TeleBot(config.TELEGRAM_TOKEN)
+client = Groq(api_key=config.GROQ_API_KEY)
 
 task_queue = Queue()
 
@@ -53,56 +53,68 @@ def fallback_intent(text):
 
 
 # ------------------
-# AI
+# AI (ใช้โครงสร้างแบบที่พี่ปรับปรุงมา นิ่งและฉลาดขึ้น)
 # ------------------
 def ask_jarvis(user_message, history_text=""):
-    prompt = f"""
-You are Jarvis AI. Return ONLY valid JSON.
+    system_instruction = """คุณคือ Jarvis AI ผู้ช่วยส่วนตัว
 
-Format:
-{{"reply":"", "action": null}}
+กฎ:
+- ตอบเป็นภาษาไทยที่เป็นธรรมชาติ เป็นกันเอง และอธิบายเข้าใจง่าย
+- สุภาพและจริงใจ
+- ลงท้ายด้วย "ครับ" ทุกประโยค
+- ห้ามใช้คำว่า "ค่ะ" หรือ "คะ" เด็ดขาด
+- ตอบเฉพาะ JSON ตามรูปแบบที่กำหนดเท่านั้น"""
 
-History:
+    prompt = f"""Context:
 {history_text}
 
 User:
 {user_message}
-"""
+
+ตอบกลับเป็น JSON รูปแบบนี้เท่านั้น:
+{{
+  "reply": "ข้อความตอบกลับ",
+  "action": null
+}}"""
 
     try:
         res = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             response_format={"type": "json_object"},
-            messages=[{"role": "user", "content": prompt}]
+            messages=[
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": prompt}
+            ]
         )
-
         return json.loads(res.choices[0].message.content)
-
     except Exception as e:
         print("AI Error:", e)
-        return {"reply": "ขออภัย ระบบ AI ขัดข้อง", "action": None}
+        return {"reply": "ขออภัยครับ ระบบ AI ขัดข้องครับ", "action": None}
 
 
 # ------------------
-# worker
+# worker (เพิ่มโค้ดล้างคำหลุด ชัวร์ 100% ก่อนส่งออกทุกช่องทาง)
 # ------------------
 def worker():
     while True:
         task = task_queue.get()
 
-        reply = ""   # 🔥 กันพัง
+        reply = ""
 
         try:
             chat_id = task["chat_id"]
             text = task["text"]
             history = task["history"]
 
-            history_text = "\n".join([f"U:{u} B:{b}" for u, b in history])
+            history_text = "\n".join([f"User:{u}\nJarvis:{b}" for u, b in history])
 
             result = ask_jarvis(text, history_text)
 
             action = result.get("action") or fallback_intent(text)
-            reply = result.get("reply") or "รับทราบ"
+            reply = result.get("reply") or "รับทราบครับ"
+
+            # 🔥 ระบบล้างคำหลุดตามที่พี่แนะนำ: ต่อให้ AI เผลอพูด "ค่ะ" โค้ดส่วนนี้จะแก้ให้เป็น "ครับ" ทันที
+            reply = reply.replace("ค่ะ", "ครับ").replace("คะ", "ครับ").replace("ครับ/ค่ะ", "ครับ")
 
             if action in ACTION_MAP:
                 try:
@@ -112,13 +124,13 @@ def worker():
 
             bot.send_message(chat_id, reply)
 
-            # 🔊 TTS กันพัง
+            # 🔊 TTS ลำโพงพูดได้คำที่ถูกต้อง
             try:
                 tts.speak(reply)
             except Exception as e:
                 print("TTS Error:", e)
 
-            # 🧠 memory กันพัง
+            # 🧠 บันทึกความจำด้วยคำที่ผ่านการกรองแล้ว
             try:
                 memory_manager.save_memory(text, reply)
             except Exception as e:
@@ -171,3 +183,4 @@ if __name__ == "__main__":
     print("Jarvis started")
 
     uvicorn.run(app, host="127.0.0.1", port=8000)
+
