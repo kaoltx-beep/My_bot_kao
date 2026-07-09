@@ -10,9 +10,11 @@ from groq import Groq
 import config
 import device_actions
 import plugin_loader
+plugin_loader.load_plugins()
+
 PLUGIN_MAP = {
-    "CHECK_BATTERY": "battery",
-    "OPEN_YOUTUBE": "youtube",
+    "check_battery": "battery",
+    "open_youtube": "youtube",
 }
 import memory_manager
 import tts
