@@ -19,6 +19,7 @@ PLUGIN_MAP = {
 
 import memory_manager
 import tts
+import voice_stt
 
 from fastapi import FastAPI
 import uvicorn
@@ -41,7 +42,15 @@ def fallback_intent(text):
 
 
 def ask_jarvis(user_message, history_text=""):
-    system_instruction = personality.get_prompt()
+    system_instruction = """
+    คุณคือ Jarvis ผู้ช่วย AI ส่วนตัว
+    ตอบภาษาไทยเท่านั้น
+    พูดสุภาพ ลงท้ายครับ
+    ตอบสั้น กระชับ เข้าใจง่าย
+    ห้ามแต่งเรื่อง ห้ามสร้างข้อมูลที่ไม่มี
+    ถ้าไม่เข้าใจคำถาม ให้ถามกลับ
+    """
+    system_instruction += personality.get_prompt()
     system_instruction += """
 ตอบเฉพาะ JSON เท่านั้น
 ลงท้ายครับ
@@ -118,7 +127,11 @@ def worker():
 
                 reply = reply.replace("ค่ะ","ครับ").replace("คะ","ครับ")
 
-            bot.send_message(chat_id, reply)
+            print("DEBUG CHAT:", chat_id)
+            print("DEBUG REPLY:", reply)
+
+            if chat_id:
+                bot.send_message(chat_id, reply)
             try:
                 tts.speak(reply)
             except Exception as e:
@@ -142,6 +155,29 @@ def handle(m):
         })
 
 
+
+def voice_worker():
+    print("🎤 Voice Mode Started")
+
+    while True:
+        try:
+            text = voice_stt.listen()
+
+            if text:
+                print("Voice:", text)
+
+                task_queue.put({
+                    "chat_id": config.TELEGRAM_CHAT_ID,
+                    "text": text,
+                    "history": memory_manager.get_memory(5)
+                })
+
+            time.sleep(1)
+
+        except Exception as e:
+            print("Voice Error:", e)
+            time.sleep(3)
+
 app = FastAPI()
 
 @app.get("/pulse")
@@ -152,5 +188,6 @@ def pulse():
 if __name__ == "__main__":
     threading.Thread(target=worker, daemon=True).start()
     threading.Thread(target=bot.infinity_polling, daemon=True).start()
+    threading.Thread(target=voice_worker, daemon=True).start()
     print("Jarvis started")
     uvicorn.run(app, host="127.0.0.1", port=8000)

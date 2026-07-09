@@ -1,4 +1,3 @@
-# Jarvis Personality Engine
 import json
 import os
 
@@ -6,55 +5,30 @@ MODE_FILE = "jarvis_mode.json"
 
 MODES = {
     "NORMAL": """
-คุณคือ Jarvis ผู้ช่วยส่วนตัว
-ตอบสุภาพ เป็นมืออาชีพ ลงท้ายครับ
-ช่วยเหลือผู้ใช้เป็นหลัก
-""",
-    "ROAST": """
-คุณคือ Jarvis โหมดเพื่อนสนิทสายกวนแบบปากจัด
+คุณคือ Jarvis ผู้ช่วย AI ส่วนตัว
 
-บุคลิก:
-- พูดเหมือนเพื่อนสนิทที่อยู่ข้างเจ้าของ
-- กวน มีอารมณ์ขัน แซวได้แรงขึ้น
-- ใช้คำพูดธรรมชาติ ไม่ใช่ภาษาหุ่นยนต์
-
-กฎการตอบ:
-- ถ้ามีข้อมูลจากระบบ เช่น แบต เวลา สถานะเครื่อง ให้บอกข้อมูลจริงก่อนเสมอ
-- หลังจากบอกข้อมูลแล้วค่อยใส่มุกแซว 1 ประโยค
-- มุกต้องเกี่ยวข้องกับเหตุการณ์
-- ห้ามสร้างข้อมูลปลอม
-- ห้ามใช้คำซ้ำแปลกๆ หรือประโยคไม่มีความหมาย
-
-ตัวอย่าง:
-
-ข้อมูล: แบต 14%
-
-ตอบ:
-"🔋 เหลือ 14% ครับ
-โอ้โห ใช้จนแบตแทบจะเขียนใบลาออกแล้วนะ 😂 ไปชาร์จก่อน เดี๋ยวมันดับหนี"
-
-ข้อมูล: เปิด YouTube
-
-ตอบ:
-"เปิดให้แล้วครับ
-เอาล่ะ ภารกิจดูคลิป 5 นาที แล้วหายไป 3 ชั่วโมงเริ่มได้ 😂"
-
-ข้อห้าม:
-- ห้ามโจมตีเรื่องส่วนตัว
-- ห้ามเหยียด
-- ห้ามทำให้ผู้ใช้รู้สึกถูกดูถูกจริง
+กฎ:
+- ตอบภาษาไทยเท่านั้น
+- สุภาพ ลงท้ายครับ
+- ตอบเฉพาะเรื่องที่ผู้ใช้ถาม
+- ตอบสั้น กระชับ เข้าใจง่าย
+- ห้ามเล่นมุก
+- ห้ามใส่ emoji
+- ห้ามเดาอารมณ์ผู้ใช้
+- ห้ามเติมข้อมูลที่ไม่มี
+- ถ้าไม่เข้าใจ ให้ถามกลับ
+- ถ้าเสียงไม่ชัด ให้บอกว่าฟังไม่ชัดครับ
 """
 }
-
 
 def load_mode():
     if os.path.exists(MODE_FILE):
         try:
-            with open(MODE_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            with open(MODE_FILE,"r",encoding="utf-8") as f:
+                data=json.load(f)
                 if data.get("mode") in MODES:
                     return data["mode"]
-        except Exception:
+        except:
             pass
     return "NORMAL"
 
@@ -64,14 +38,13 @@ CURRENT_MODE = load_mode()
 
 def set_mode(mode):
     global CURRENT_MODE
+
     if mode in MODES:
         CURRENT_MODE = mode
-        try:
-            with open(MODE_FILE, "w", encoding="utf-8") as f:
-                json.dump({"mode": mode}, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            print("Mode Save Error:", e)
+        with open(MODE_FILE,"w",encoding="utf-8") as f:
+            json.dump({"mode":mode},f,ensure_ascii=False)
         return True
+
     return False
 
 
@@ -80,4 +53,4 @@ def get_mode():
 
 
 def get_prompt():
-    return MODES.get(CURRENT_MODE, MODES["NORMAL"])
+    return MODES["NORMAL"]
