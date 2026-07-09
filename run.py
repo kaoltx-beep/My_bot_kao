@@ -76,7 +76,15 @@ User:
 
 def apply_personality_to_action(action_result, history_text=""):
     result = ask_jarvis(
-        f"ข้อมูลจากระบบคือ: {action_result} กรุณาตอบผู้ใช้ด้วยบุคลิกปัจจุบัน",
+        f"""ข้อมูลจากระบบจริง:
+{action_result}
+
+กฎ:
+- ห้ามเปลี่ยนตัวเลขหรือข้อมูลระบบ
+- ห้ามสร้างข้อมูลใหม่
+- ต้องแสดงข้อมูลจริงก่อน
+- ค่อยใส่มุกตามหลัง
+- ตอบด้วยบุคลิกปัจจุบัน""",
         history_text
     )
     return result.get("reply") or action_result
