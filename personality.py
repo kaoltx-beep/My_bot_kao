@@ -1,6 +1,8 @@
 # Jarvis Personality Engine
+import json
+import os
 
-CURRENT_MODE = "NORMAL"
+MODE_FILE = "jarvis_mode.json"
 
 MODES = {
     "NORMAL": """
@@ -18,10 +20,30 @@ MODES = {
 }
 
 
+def load_mode():
+    if os.path.exists(MODE_FILE):
+        try:
+            with open(MODE_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if data.get("mode") in MODES:
+                    return data["mode"]
+        except Exception:
+            pass
+    return "NORMAL"
+
+
+CURRENT_MODE = load_mode()
+
+
 def set_mode(mode):
     global CURRENT_MODE
     if mode in MODES:
         CURRENT_MODE = mode
+        try:
+            with open(MODE_FILE, "w", encoding="utf-8") as f:
+                json.dump({"mode": mode}, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print("Mode Save Error:", e)
         return True
     return False
 
