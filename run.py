@@ -6,25 +6,23 @@ from queue import Queue
 import telebot
 from groq import Groq
 
-# ดึงค่าจากไฟล์เดิมในระบบของพี่ ปลอดภัยไม่พังชัวร์
 import config
 import device_actions
 import plugin_loader
 plugin_loader.load_plugins()
+import personality
 
 PLUGIN_MAP = {
     "check_battery": "battery",
     "open_youtube": "youtube",
 }
+
 import memory_manager
 import tts
 
 from fastapi import FastAPI
 import uvicorn
 
-# ------------------
-# STATUS
-# ------------------
 JARVIS_LIVE_STATUS = {
     "last_ai_latency_ms": 0,
     "intent_ok": True,
@@ -44,9 +42,6 @@ ACTION_MAP = {
 }
 
 
-# ------------------
-# fallback intent
-# ------------------
 def fallback_intent(text):
     text = text.lower()
 
@@ -59,18 +54,14 @@ def fallback_intent(text):
     return None
 
 
-# ------------------
-# AI (ใช้โครงสร้างแบบที่พี่ปรับปรุงมา นิ่งและฉลาดขึ้น)
-# ------------------
 def ask_jarvis(user_message, history_text=""):
-    system_instruction = """คุณคือ Jarvis AI ผู้ช่วยส่วนตัว
+    system_instruction = personality.get_prompt()
+    system_instruction += """
 
-กฎ:
-- ตอบเป็นภาษาไทยที่เป็นธรรมชาติ เป็นกันเอง และอธิบายเข้าใจง่าย
-- สุภาพและจริงใจ
-- ลงท้ายด้วย "ครับ" ทุกประโยค
-- ห้ามใช้คำว่า "ค่ะ" หรือ "คะ" เด็ดขาด
-- ตอบเฉพาะ JSON ตามรูปแบบที่กำหนดเท่านั้น"""
+กฎเพิ่มเติม:
+- ตอบเฉพาะ JSON ตามรูปแบบที่กำหนดเท่านั้น
+- ลงท้ายครับ
+"""
 
     prompt = f"""Context:
 {history_text}
@@ -99,13 +90,9 @@ User:
         return {"reply": "ขออภัยครับ ระบบ AI ขัดข้องครับ", "action": None}
 
 
-# ------------------
-# worker (เพิ่มโค้ดล้างคำหลุด ชัวร์ 100% ก่อนส่งออกทุกช่องทาง)
-# ------------------
 def worker():
     while True:
         task = task_queue.get()
-
         reply = ""
 
         try:
@@ -113,36 +100,37 @@ def worker():
             text = task["text"]
             history = task["history"]
 
-            history_text = "\n".join([f"User:{u}\nJarvis:{b}" for u, b in history])
+            # เปลี่ยนโหมดบุคลิก
+            if "เปิดโหมดกวน" in text or "โหมดกวน" in text:
+                personality.set_mode("ROAST")
+                reply = "เปิดโหมดกวนแล้วครับ 😎"
+            elif "กลับโหมดปกติ" in text or "โหมดปกติ" in text:
+                personality.set_mode("NORMAL")
+                reply = "กลับโหมดปกติแล้วครับ"
+            else:
+                history_text = "\n".join([f"User:{u}\nJarvis:{b}" for u, b in history])
+                result = ask_jarvis(text, history_text)
 
-            result = ask_jarvis(text, history_text)
+                action = result.get("action") or fallback_intent(text)
+                reply = result.get("reply") or "รับทราบครับ"
 
-            action = result.get("action") or fallback_intent(text)
-            reply = result.get("reply") or "รับทราบครับ"
+                reply = reply.replace("ค่ะ", "ครับ").replace("คะ", "ครับ")
 
-            # 🔥 ระบบล้างคำหลุดตามที่พี่แนะนำ: ต่อให้ AI เผลอพูด "ค่ะ" โค้ดส่วนนี้จะแก้ให้เป็น "ครับ" ทันที
-            reply = reply.replace("ค่ะ", "ครับ").replace("คะ", "ครับ").replace("ครับ/ค่ะ", "ครับ")
-
-            if action in PLUGIN_MAP:
-                try:
-                    plugin_name = PLUGIN_MAP[action]
-                    plugin = plugin_loader.get_plugin(plugin_name)
-
-                    if plugin:
-                        reply = plugin.execute()
-
-                except Exception as e:
-                    print("PLUGIN Error:", e)
+                if action in PLUGIN_MAP:
+                    try:
+                        plugin = plugin_loader.get_plugin(PLUGIN_MAP[action])
+                        if plugin:
+                            reply = plugin.execute()
+                    except Exception as e:
+                        print("PLUGIN Error:", e)
 
             bot.send_message(chat_id, reply)
 
-            # 🔊 TTS ลำโพงพูดได้คำที่ถูกต้อง
             try:
                 tts.speak(reply)
             except Exception as e:
                 print("TTS Error:", e)
 
-            # 🧠 บันทึกความจำด้วยคำที่ผ่านการกรองแล้ว
             try:
                 memory_manager.save_memory(text, reply)
             except Exception as e:
@@ -150,15 +138,11 @@ def worker():
 
         except Exception as e:
             print("Worker Error:", e)
-            print("DEBUG reply =", reply)
 
         finally:
             task_queue.task_done()
 
 
-# ------------------
-# telegram
-# ------------------
 @bot.message_handler(func=lambda m: True)
 def handle(m):
     if not m.text:
@@ -171,9 +155,6 @@ def handle(m):
     })
 
 
-# ------------------
-# fastapi
-# ------------------
 app = FastAPI()
 
 @app.get("/pulse")
@@ -185,14 +166,9 @@ def pulse():
     }
 
 
-# ------------------
-# start
-# ------------------
 if __name__ == "__main__":
     threading.Thread(target=worker, daemon=True).start()
     threading.Thread(target=bot.infinity_polling, daemon=True).start()
 
     print("Jarvis started")
-
     uvicorn.run(app, host="127.0.0.1", port=8000)
-
