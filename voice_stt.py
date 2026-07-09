@@ -12,20 +12,19 @@ HOME = "/data/data/com.termux/files/home"
 def record_audio():
     filename = f"{HOME}/voice_{int(time.time())}.m4a"
 
-    # stop old recording first
     subprocess.run(["termux-microphone-record", "-q"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     time.sleep(1)
 
     p = subprocess.Popen([
         "termux-microphone-record",
         "-f", filename,
-        "-l", "5",
+        "-l", "3",
         "-r", "16000",
         "-c", "1",
         "-b", "64000"
     ])
 
-    time.sleep(6)
+    time.sleep(4)
     subprocess.run(["termux-microphone-record", "-q"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     p.wait(timeout=3)
 
