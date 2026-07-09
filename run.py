@@ -9,6 +9,11 @@ from groq import Groq
 # ดึงค่าจากไฟล์เดิมในระบบของพี่ ปลอดภัยไม่พังชัวร์
 import config
 import device_actions
+import plugin_loader
+PLUGIN_MAP = {
+    "CHECK_BATTERY": "battery",
+    "OPEN_YOUTUBE": "youtube",
+}
 import memory_manager
 import tts
 
@@ -116,11 +121,16 @@ def worker():
             # 🔥 ระบบล้างคำหลุดตามที่พี่แนะนำ: ต่อให้ AI เผลอพูด "ค่ะ" โค้ดส่วนนี้จะแก้ให้เป็น "ครับ" ทันที
             reply = reply.replace("ค่ะ", "ครับ").replace("คะ", "ครับ").replace("ครับ/ค่ะ", "ครับ")
 
-            if action in ACTION_MAP:
+            if action in PLUGIN_MAP:
                 try:
-                    reply = ACTION_MAP[action]()
+                    plugin_name = PLUGIN_MAP[action]
+                    plugin = plugin_loader.get_plugin(plugin_name)
+
+                    if plugin:
+                        reply = plugin.execute()
+
                 except Exception as e:
-                    print("ACTION Error:", e)
+                    print("PLUGIN Error:", e)
 
             bot.send_message(chat_id, reply)
 

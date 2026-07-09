@@ -1,5 +1,13 @@
 __pycache__/
 *.pyc
+
 *.db
 *.db-shm
 *.db-wal
+
+*.log
+
+run.py.error
+run.py.broken
+run.py.backup
+run.py.before_router_fix
