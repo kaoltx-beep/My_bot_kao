@@ -8,7 +8,7 @@ import time
 from queue import Queue
 from groq import Groq
 
-import device_actions
+import plugin_loader
 import memory_manager
 import tts
 
@@ -16,9 +16,6 @@ from fastapi import FastAPI
 import uvicorn
 import os
 
-# ------------------
-# STATUS
-# ------------------
 JARVIS_LIVE_STATUS = {
     "last_ai_latency_ms": 0,
     "intent_ok": True,
@@ -29,18 +26,13 @@ logging.basicConfig(level=logging.ERROR)
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 client = Groq(api_key=GROQ_API_KEY)
-
 task_queue = Queue()
 
-ACTION_MAP = {
-    "open_youtube": device_actions.open_youtube,
-    "check_battery": device_actions.check_battery,
-}
+# Dynamic plugin system
+ACTION_MAP = plugin_loader.load_plugins()
+print("Loaded plugins:", list(ACTION_MAP.keys()))
 
 
-# ------------------
-# fallback intent
-# ------------------
 def fallback_intent(text):
     text = text.lower()
 
@@ -53,9 +45,6 @@ def fallback_intent(text):
     return None
 
 
-# ------------------
-# AI
-# ------------------
 def ask_jarvis(user_message, history_text=""):
     prompt = f"""
 You are Jarvis AI. Return ONLY valid JSON.
@@ -84,14 +73,10 @@ User:
         return {"reply": "ขออภัย ระบบ AI ขัดข้อง", "action": None}
 
 
-# ------------------
-# worker
-# ------------------
 def worker():
     while True:
         task = task_queue.get()
-
-        reply = ""   # 🔥 กันพัง
+        reply = ""
 
         try:
             chat_id = task["chat_id"]
@@ -113,13 +98,11 @@ def worker():
 
             bot.send_message(chat_id, reply)
 
-            # 🔊 TTS กันพัง
             try:
-                tts.speak(reply)
+                threading.Thread(target=tts.speak, args=(reply,), daemon=True).start()
             except Exception as e:
                 print("TTS Error:", e)
 
-            # 🧠 memory กันพัง
             try:
                 memory_manager.save_memory(text, reply)
             except Exception as e:
@@ -133,9 +116,6 @@ def worker():
             task_queue.task_done()
 
 
-# ------------------
-# telegram
-# ------------------
 @bot.message_handler(func=lambda m: True)
 def handle(m):
     if not m.text:
@@ -148,29 +128,24 @@ def handle(m):
     })
 
 
-# ------------------
-# fastapi
-# ------------------
 app = FastAPI()
+
 
 @app.get("/pulse")
 def pulse():
     return {
         "status": "ok",
         "queue": task_queue.qsize(),
+        "plugins": list(ACTION_MAP.keys()),
         "time": time.time()
     }
 
 
-# ------------------
-# start
-# ------------------
 if __name__ == "__main__":
     threading.Thread(target=worker, daemon=True).start()
     threading.Thread(target=bot.infinity_polling, daemon=True).start()
 
     print("Jarvis started")
 
-    # Get port from environment or default to 8000
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
