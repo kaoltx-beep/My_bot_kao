@@ -8,15 +8,22 @@ def check_battery():
 
 
 def open_youtube():
+    import subprocess
+
     try:
-        result = os.system(
-            "am start -a android.intent.action.VIEW -d https://www.youtube.com"
+        subprocess.run(
+            [
+                "am",
+                "start",
+                "-n",
+                "com.google.android.youtube/com.google.android.youtube.HomeActivity"
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
         )
 
-        if result == 0:
-            return "📺 เปิด YouTube แล้วครับนายท่าน"
-
-        return "❌ เปิด YouTube ไม่สำเร็จ"
+        return "📺 เปิด YouTube แล้วครับนายท่าน"
 
     except Exception as e:
         return f"❌ เปิด YouTube ไม่สำเร็จ: {e}"
+

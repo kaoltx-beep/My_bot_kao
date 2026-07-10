@@ -9,12 +9,14 @@ from groq import Groq
 import config
 import device_actions
 import plugin_loader
+import plugin_router
 plugin_loader.load_plugins()
 import personality
 
 PLUGIN_MAP = {
     "check_battery": "battery",
     "open_youtube": "youtube",
+    "news": "news",
 }
 
 import memory_manager
@@ -38,6 +40,10 @@ def fallback_intent(text):
         return "check_battery"
     if "youtube" in text or "ยูทูป" in text:
         return "open_youtube"
+
+    if "ข่าว" in text or "news" in text:
+        return "news"
+
     return None
 
 
@@ -47,12 +53,15 @@ def ask_jarvis(user_message, history_text=""):
     ตอบภาษาไทยเท่านั้น
     พูดสุภาพ ลงท้ายครับ
     ตอบสั้น กระชับ เข้าใจง่าย
-    ห้ามแต่งเรื่อง ห้ามสร้างข้อมูลที่ไม่มี
+    ถ้าเป็นความรู้ทั่วไป ให้ตอบจากความรู้ที่มีได้
+ถ้าไม่แน่ใจ ให้บอกว่าไม่แน่ใจ
+ห้ามสร้างตัวเลข ข้อมูลระบบ หรือผลการตรวจสอบที่ไม่มีจริง
     ถ้าไม่เข้าใจคำถาม ให้ถามกลับ
     """
-    system_instruction += personality.get_prompt()
+#     system_instruction += personality.get_prompt()
     system_instruction += """
 ตอบเฉพาะ JSON เท่านั้น
+ใช้บุคลิกตามโหมดปัจจุบัน
 ลงท้ายครับ
 """
 
@@ -119,8 +128,11 @@ def worker():
                 action = result.get("action") or fallback_intent(text)
                 reply = result.get("reply") or "รับทราบครับ"
 
-                if action in PLUGIN_MAP:
-                    plugin = plugin_loader.get_plugin(PLUGIN_MAP[action])
+                plugin_name = plugin_router.find_plugin(text)
+
+                if plugin_name:
+                    plugin = plugin_loader.get_plugin(plugin_name)
+
                     if plugin:
                         action_result = plugin.execute()
                         reply = apply_personality_to_action(action_result, history_text)
@@ -188,6 +200,6 @@ def pulse():
 if __name__ == "__main__":
     threading.Thread(target=worker, daemon=True).start()
     threading.Thread(target=bot.infinity_polling, daemon=True).start()
-    threading.Thread(target=voice_worker, daemon=True).start()
+  # threading.Thread(target=voice_worker, daemon=True).start()
     print("Jarvis started")
     uvicorn.run(app, host="127.0.0.1", port=8000)

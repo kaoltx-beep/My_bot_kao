@@ -1,6 +1,16 @@
-PLUGIN_NAME = "battery"
-
 import device_actions
+
+METADATA = {
+    "name": "battery",
+    "description": "ตรวจสอบระดับแบตเตอรี่เครื่อง",
+    "keywords": [
+        "แบต",
+        "แบตเตอรี่",
+        "battery",
+        "เช็คแบต",
+        "ตรวจแบต"
+    ]
+}
 
 
 def execute(context=None):
