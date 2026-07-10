@@ -9,6 +9,7 @@ from queue import Queue
 from groq import Groq
 
 import plugin_loader
+import intent_router
 import memory_manager
 import tts
 
@@ -22,7 +23,6 @@ JARVIS_LIVE_STATUS = {
     "db_ok": True
 }
 
-# Jarvis personality mode
 CURRENT_MODE = "FUN"
 
 PERSONALITY_MODES = {
@@ -41,18 +41,6 @@ ACTION_MAP = plugin_loader.load_plugins()
 print("Loaded plugins:", list(ACTION_MAP.keys()))
 
 
-def fallback_intent(text):
-    text = text.lower()
-
-    if "แบต" in text or "battery" in text:
-        return "check_battery"
-
-    if "youtube" in text or "ยูทูป" in text:
-        return "open_youtube"
-
-    return None
-
-
 def ask_jarvis(user_message, history_text=""):
     plugin_info = plugin_loader.get_plugin_info()
 
@@ -63,14 +51,10 @@ Personality Mode: {CURRENT_MODE}
 Style:
 {PERSONALITY_MODES.get(CURRENT_MODE)}
 
-You may joke and tease naturally in FUN mode.
-Do not be offensive toward the user.
-
 Available tools:
 {json.dumps(plugin_info, ensure_ascii=False)}
 
 Return ONLY valid JSON.
-
 Format:
 {{"reply":"", "action": null}}
 
@@ -109,7 +93,7 @@ def worker():
 
             result = ask_jarvis(text, history_text)
 
-            action = result.get("action") or fallback_intent(text)
+            action = result.get("action") or intent_router.classify(text)
             reply = result.get("reply") or "รับทราบ"
 
             if action in ACTION_MAP:
