@@ -117,6 +117,13 @@ def worker():
             history = task["history"]
             history_text = "\n".join([f"User:{u}\nJarvis:{b}" for u,b in history])
 
+            db_memory = memory_manager.get_memory(5)
+
+            if db_memory:
+                history_text += "\n\n" + "\n".join(
+                    [f"User:{u}\nJarvis:{b}" for u,b in db_memory]
+                )
+
             if "เปิดโหมดกวน" in text or "โหมดกวน" in text:
                 personality.set_mode("ROAST")
                 reply = "เปิดโหมดกวนแล้วครับ 😎"
@@ -128,14 +135,18 @@ def worker():
                 action = result.get("action") or fallback_intent(text)
                 reply = result.get("reply") or "รับทราบครับ"
 
-                plugin_name = plugin_router.find_plugin(text)
+                plugin_name = plugin_router.find_plugin_with_ai(text, lambda x: ask_jarvis(x).get("reply"))
 
                 if plugin_name:
                     plugin = plugin_loader.get_plugin(plugin_name)
 
                     if plugin:
                         action_result = plugin.execute()
-                        reply = apply_personality_to_action(action_result, history_text)
+
+                        if plugin_name == "news":
+                            reply = action_result
+                        else:
+                            reply = apply_personality_to_action(action_result, history_text)
 
                 reply = reply.replace("ค่ะ","ครับ").replace("คะ","ครับ")
 
