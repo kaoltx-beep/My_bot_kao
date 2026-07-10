@@ -29,3 +29,37 @@ def execute_plugin(text):
         return plugin.execute()
 
     return None
+def list_plugins():
+    result = {}
+
+    for name, plugin in plugin_loader.PLUGINS.items():
+        if hasattr(plugin, "METADATA"):
+            result[name] = plugin.METADATA
+
+    return result
+
+
+def find_plugin_with_ai(text, ai_function):
+    plugin = find_plugin(text)
+
+    if plugin:
+        return plugin
+
+    plugins = list_plugins()
+
+    result = ai_function(
+        f"""
+ข้อความผู้ใช้:
+{text}
+
+เลือก Plugin ที่เหมาะสมจากรายการนี้:
+{plugins}
+
+ตอบเฉพาะชื่อ Plugin เท่านั้น
+"""
+    )
+
+    if result in plugins:
+        return result
+
+    return None
