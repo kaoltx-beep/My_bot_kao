@@ -2,12 +2,17 @@ import os
 import importlib
 
 
+PLUGIN_REGISTRY = {}
+
+
 def load_plugins():
-    action_map = {}
+    global PLUGIN_REGISTRY
+
+    PLUGIN_REGISTRY = {}
     folder = "plugins"
 
     if not os.path.exists(folder):
-        return action_map
+        return {}
 
     for file in os.listdir(folder):
         if file.endswith(".py") and file != "__init__.py":
@@ -15,10 +20,25 @@ def load_plugins():
                 name = file[:-3]
                 module = importlib.import_module(f"plugins.{name}")
 
-                if hasattr(module, "PLUGIN_NAME") and hasattr(module, "execute"):
-                    action_map[module.PLUGIN_NAME] = module.execute
+                if hasattr(module, "METADATA") and hasattr(module, "execute"):
+                    plugin_name = module.METADATA["name"]
+
+                    PLUGIN_REGISTRY[plugin_name] = {
+                        "execute": module.execute,
+                        "metadata": module.METADATA
+                    }
 
             except Exception as e:
                 print(f"Plugin load error {file}: {e}")
 
-    return action_map
+    return {
+        name: data["execute"]
+        for name, data in PLUGIN_REGISTRY.items()
+    }
+
+
+def get_plugin_info():
+    return {
+        name: data["metadata"]
+        for name, data in PLUGIN_REGISTRY.items()
+    }
