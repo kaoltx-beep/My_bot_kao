@@ -22,13 +22,21 @@ JARVIS_LIVE_STATUS = {
     "db_ok": True
 }
 
+# Jarvis personality mode
+CURRENT_MODE = "FUN"
+
+PERSONALITY_MODES = {
+    "SERIOUS": "พูดสุภาพ ลงท้ายครับ วิเคราะห์ตรงประเด็น",
+    "FUN": "เป็นเพื่อนสนิท พูดกวน แซวได้ ใช้คำหยาบตามบริบท แต่ไม่ทำร้ายผู้ใช้",
+    "DEVELOPER": "โหมดนักพัฒนา วิเคราะห์ระบบและโค้ดละเอียด"
+}
+
 logging.basicConfig(level=logging.ERROR)
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 client = Groq(api_key=GROQ_API_KEY)
 task_queue = Queue()
 
-# Dynamic plugin system
 ACTION_MAP = plugin_loader.load_plugins()
 print("Loaded plugins:", list(ACTION_MAP.keys()))
 
@@ -46,8 +54,22 @@ def fallback_intent(text):
 
 
 def ask_jarvis(user_message, history_text=""):
+    plugin_info = plugin_loader.get_plugin_info()
+
     prompt = f"""
-You are Jarvis AI. Return ONLY valid JSON.
+You are Jarvis AI assistant.
+
+Personality Mode: {CURRENT_MODE}
+Style:
+{PERSONALITY_MODES.get(CURRENT_MODE)}
+
+You may joke and tease naturally in FUN mode.
+Do not be offensive toward the user.
+
+Available tools:
+{json.dumps(plugin_info, ensure_ascii=False)}
+
+Return ONLY valid JSON.
 
 Format:
 {{"reply":"", "action": null}}
@@ -70,7 +92,7 @@ User:
 
     except Exception as e:
         print("AI Error:", e)
-        return {"reply": "ขออภัย ระบบ AI ขัดข้อง", "action": None}
+        return {"reply": "ระบบ AI ขัดข้อง", "action": None}
 
 
 def worker():
@@ -91,26 +113,15 @@ def worker():
             reply = result.get("reply") or "รับทราบ"
 
             if action in ACTION_MAP:
-                try:
-                    reply = ACTION_MAP[action]()
-                except Exception as e:
-                    print("ACTION Error:", e)
+                reply = ACTION_MAP[action]()
 
             bot.send_message(chat_id, reply)
 
-            try:
-                threading.Thread(target=tts.speak, args=(reply,), daemon=True).start()
-            except Exception as e:
-                print("TTS Error:", e)
-
-            try:
-                memory_manager.save_memory(text, reply)
-            except Exception as e:
-                print("Memory Error:", e)
+            threading.Thread(target=tts.speak, args=(reply,), daemon=True).start()
+            memory_manager.save_memory(text, reply)
 
         except Exception as e:
             print("Worker Error:", e)
-            print("DEBUG reply =", reply)
 
         finally:
             task_queue.task_done()
@@ -135,6 +146,7 @@ app = FastAPI()
 def pulse():
     return {
         "status": "ok",
+        "mode": CURRENT_MODE,
         "queue": task_queue.qsize(),
         "plugins": list(ACTION_MAP.keys()),
         "time": time.time()
