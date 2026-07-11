@@ -1,147 +1,216 @@
-from config import TELEGRAM_TOKEN, GROQ_API_KEY
-
-import logging
 import threading
-import json
-import telebot
 import time
+import logging
+import json
 from queue import Queue
+import telebot
 from groq import Groq
 
+import config
+import device_actions
 import plugin_loader
-import intent_router
+import plugin_router
+plugin_loader.load_plugins()
+import personality
+
+PLUGIN_MAP = {
+    "check_battery": "battery",
+    "open_youtube": "youtube",
+    "news": "news",
+}
+
 import memory_manager
 import tts
+import voice_stt
 
 from fastapi import FastAPI
 import uvicorn
-import os
-
-JARVIS_LIVE_STATUS = {
-    "last_ai_latency_ms": 0,
-    "intent_ok": True,
-    "db_ok": True
-}
-
-CURRENT_MODE = "FUN"
-
-PERSONALITY_MODES = {
-    "SERIOUS": "พูดสุภาพ ลงท้ายครับ วิเคราะห์ตรงประเด็น",
-    "FUN": "เป็นเพื่อนสนิท พูดกวน แซวได้ ใช้คำหยาบตามบริบท แต่ไม่ทำร้ายผู้ใช้",
-    "DEVELOPER": "โหมดนักพัฒนา วิเคราะห์ระบบและโค้ดละเอียด"
-}
 
 logging.basicConfig(level=logging.ERROR)
 
-bot = telebot.TeleBot(TELEGRAM_TOKEN)
-client = Groq(api_key=GROQ_API_KEY)
+bot = telebot.TeleBot(config.TELEGRAM_TOKEN)
+client = Groq(api_key=config.GROQ_API_KEY)
+
 task_queue = Queue()
 
-ACTION_MAP = plugin_loader.load_plugins()
-print("Loaded plugins:", list(ACTION_MAP.keys()))
+
+def fallback_intent(text):
+    text = text.lower()
+    if "แบต" in text or "battery" in text:
+        return "check_battery"
+    if "youtube" in text or "ยูทูป" in text:
+        return "open_youtube"
+
+    if "ข่าว" in text or "news" in text:
+        return "news"
+
+    return None
 
 
 def ask_jarvis(user_message, history_text=""):
-    plugin_info = plugin_loader.get_plugin_info()
+    system_instruction = """
+    คุณคือ Jarvis ผู้ช่วย AI ส่วนตัว
+    ตอบภาษาไทยเท่านั้น
+    พูดสุภาพ ลงท้ายครับ
+    ตอบสั้น กระชับ เข้าใจง่าย
+    ถ้าเป็นความรู้ทั่วไป ให้ตอบจากความรู้ที่มีได้
+ถ้าไม่แน่ใจ ให้บอกว่าไม่แน่ใจ
+ห้ามสร้างตัวเลข ข้อมูลระบบ หรือผลการตรวจสอบที่ไม่มีจริง
+    ถ้าไม่เข้าใจคำถาม ให้ถามกลับ
+    """
+#     system_instruction += personality.get_prompt()
+    system_instruction += """
+ตอบเฉพาะ JSON เท่านั้น
+ใช้บุคลิกตามโหมดปัจจุบัน
+ลงท้ายครับ
+"""
 
-    prompt = f"""
-You are Jarvis AI assistant.
-
-Personality Mode: {CURRENT_MODE}
-Style:
-{PERSONALITY_MODES.get(CURRENT_MODE)}
-
-Available tools:
-{json.dumps(plugin_info, ensure_ascii=False)}
-
-Return ONLY valid JSON.
-Format:
-{{"reply":"", "action": null}}
-
-History:
+    prompt = f"""Context:
 {history_text}
 
 User:
 {user_message}
-"""
+
+ตอบ JSON:
+{{
+ "reply":"ข้อความตอบกลับ",
+ "action":null
+}}"""
 
     try:
         res = client.chat.completions.create(
             model="llama-3.1-8b-instant",
-            response_format={"type": "json_object"},
-            messages=[{"role": "user", "content": prompt}]
+            response_format={"type":"json_object"},
+            messages=[
+                {"role":"system","content":system_instruction},
+                {"role":"user","content":prompt}
+            ]
         )
-
         return json.loads(res.choices[0].message.content)
-
     except Exception as e:
         print("AI Error:", e)
-        return {"reply": "ระบบ AI ขัดข้อง", "action": None}
+        return {"reply":"ขออภัยครับ ระบบ AI ขัดข้องครับ","action":None}
+
+
+def apply_personality_to_action(action_result, history_text=""):
+    result = ask_jarvis(
+        f"""ข้อมูลจากระบบจริง:
+{action_result}
+
+กฎ:
+- ห้ามเปลี่ยนตัวเลขหรือข้อมูลระบบ
+- ห้ามสร้างข้อมูลใหม่
+- ต้องแสดงข้อมูลจริงก่อน
+- ค่อยใส่มุกตามหลัง
+- ตอบด้วยบุคลิกปัจจุบัน""",
+        history_text
+    )
+    return result.get("reply") or action_result
 
 
 def worker():
     while True:
         task = task_queue.get()
-        reply = ""
-
         try:
             chat_id = task["chat_id"]
             text = task["text"]
             history = task["history"]
+            history_text = "\n".join([f"User:{u}\nJarvis:{b}" for u,b in history])
 
-            history_text = "\n".join([f"U:{u} B:{b}" for u, b in history])
+            db_memory = memory_manager.get_memory(5)
 
-            result = ask_jarvis(text, history_text)
+            if db_memory:
+                history_text += "\n\n" + "\n".join(
+                    [f"User:{u}\nJarvis:{b}" for u,b in db_memory]
+                )
 
-            action = result.get("action") or intent_router.classify(text)
-            reply = result.get("reply") or "รับทราบ"
+            if "เปิดโหมดกวน" in text or "โหมดกวน" in text:
+                personality.set_mode("ROAST")
+                reply = "เปิดโหมดกวนแล้วครับ 😎"
+            elif "กลับโหมดปกติ" in text or "โหมดปกติ" in text:
+                personality.set_mode("NORMAL")
+                reply = "กลับโหมดปกติแล้วครับ"
+            else:
+                result = ask_jarvis(text, history_text)
+                action = result.get("action") or fallback_intent(text)
+                reply = result.get("reply") or "รับทราบครับ"
 
-            if action in ACTION_MAP:
-                reply = ACTION_MAP[action]()
+                plugin_name = plugin_router.find_plugin_with_ai(text, lambda x: ask_jarvis(x).get("reply"))
 
-            bot.send_message(chat_id, reply)
+                if plugin_name:
+                    plugin = plugin_loader.get_plugin(plugin_name)
 
-            threading.Thread(target=tts.speak, args=(reply,), daemon=True).start()
+                    if plugin:
+                        action_result = plugin.execute()
+
+                        if plugin_name == "news":
+                            reply = action_result
+                        else:
+                            reply = apply_personality_to_action(action_result, history_text)
+
+                reply = reply.replace("ค่ะ","ครับ").replace("คะ","ครับ")
+
+            print("DEBUG CHAT:", chat_id)
+            print("DEBUG REPLY:", reply)
+
+            if chat_id:
+                bot.send_message(chat_id, reply)
+            try:
+                tts.speak(reply)
+            except Exception as e:
+                print("TTS Error:",e)
+
             memory_manager.save_memory(text, reply)
 
         except Exception as e:
-            print("Worker Error:", e)
-
+            print("Worker Error:",e)
         finally:
             task_queue.task_done()
 
 
 @bot.message_handler(func=lambda m: True)
 def handle(m):
-    if not m.text:
-        return
+    if m.text:
+        task_queue.put({
+            "chat_id":m.chat.id,
+            "text":m.text,
+            "history":memory_manager.get_memory(5)
+        })
 
-    task_queue.put({
-        "chat_id": m.chat.id,
-        "text": m.text,
-        "history": memory_manager.get_memory(5)
-    })
 
+
+def voice_worker():
+    print("🎤 Voice Mode Started")
+
+    while True:
+        try:
+            text = voice_stt.listen()
+
+            if text:
+                print("Voice:", text)
+
+                task_queue.put({
+                    "chat_id": config.TELEGRAM_CHAT_ID,
+                    "text": text,
+                    "history": memory_manager.get_memory(5)
+                })
+
+            time.sleep(1)
+
+        except Exception as e:
+            print("Voice Error:", e)
+            time.sleep(3)
 
 app = FastAPI()
 
-
 @app.get("/pulse")
 def pulse():
-    return {
-        "status": "ok",
-        "mode": CURRENT_MODE,
-        "queue": task_queue.qsize(),
-        "plugins": list(ACTION_MAP.keys()),
-        "time": time.time()
-    }
+    return {"status":"ok","queue":task_queue.qsize(),"time":time.time()}
 
 
 if __name__ == "__main__":
     threading.Thread(target=worker, daemon=True).start()
     threading.Thread(target=bot.infinity_polling, daemon=True).start()
-
+  # threading.Thread(target=voice_worker, daemon=True).start()
     print("Jarvis started")
-
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(app, host="127.0.0.1", port=8000)

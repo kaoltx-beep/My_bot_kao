@@ -1,44 +1,60 @@
 import os
 import importlib
 
-
-PLUGIN_REGISTRY = {}
+PLUGINS = {}
 
 
 def load_plugins():
-    global PLUGIN_REGISTRY
+    global PLUGINS
 
-    PLUGIN_REGISTRY = {}
-    folder = "plugins"
+    plugin_folder = "plugins"
 
-    if not os.path.exists(folder):
-        return {}
+    for file in os.listdir(plugin_folder):
 
-    for file in os.listdir(folder):
-        if file.endswith(".py") and file != "__init__.py":
-            try:
-                name = file[:-3]
-                module = importlib.import_module(f"plugins.{name}")
+        if not file.endswith(".py"):
+            continue
 
-                if hasattr(module, "METADATA") and hasattr(module, "execute"):
-                    plugin_name = module.METADATA["name"]
+        if file == "__init__.py":
+            continue
 
-                    PLUGIN_REGISTRY[plugin_name] = {
-                        "execute": module.execute,
-                        "metadata": module.METADATA
-                    }
+        name = file[:-3]
 
-            except Exception as e:
-                print(f"Plugin load error {file}: {e}")
+        try:
+            module = importlib.import_module(
+                f"plugins.{name}"
+            )
 
-    return {
-        name: data["execute"]
-        for name, data in PLUGIN_REGISTRY.items()
-    }
+            if hasattr(module, "METADATA"):
+                plugin_name = module.METADATA.get("name")
+                if plugin_name:
+                    PLUGINS[plugin_name] = module
+                    continue
+
+            if hasattr(module, "PLUGIN_NAME"):
+                PLUGINS[module.PLUGIN_NAME] = module
+
+        except Exception as e:
+            print(
+                f"Plugin load error {name}:",
+                e
+            )
+
+    return PLUGINS
+
+
+
+def get_plugin(name):
+    return PLUGINS.get(name)
+
 
 
 def get_plugin_info():
-    return {
-        name: data["metadata"]
-        for name, data in PLUGIN_REGISTRY.items()
-    }
+
+    result = {}
+
+    for name, plugin in PLUGINS.items():
+
+        if hasattr(plugin, "METADATA"):
+            result[name] = plugin.METADATA
+
+    return result

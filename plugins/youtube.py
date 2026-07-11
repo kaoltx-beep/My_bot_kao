@@ -1,11 +1,19 @@
+import device_actions
+
 METADATA = {
-    "name": "open_youtube",
-    "description": "เปิด YouTube บนอุปกรณ์ Android",
-    "category": "device",
-    "parameters": ["url", "search_query"]
+    "name": "youtube",
+    "description": "เปิดแอป YouTube บนอุปกรณ์",
+    "keywords": [
+        "youtube",
+        "ยูทูป",
+        "เปิดยูทูป",
+        "เปิด youtube"
+    ]
 }
 
 
-def execute(args=None):
-    import device_actions
-    return device_actions.open_youtube()
+def execute(context=None):
+    try:
+        return device_actions.open_youtube()
+    except Exception as e:
+        return f"เปิด YouTube ไม่สำเร็จครับ: {e}"

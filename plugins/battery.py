@@ -1,11 +1,17 @@
+import device_actions
+
 METADATA = {
-    "name": "check_battery",
-    "description": "ตรวจสอบระดับแบตเตอรี่ของมือถือ",
-    "category": "device",
-    "parameters": []
+    "name": "battery",
+    "description": "ตรวจสอบระดับแบตเตอรี่เครื่อง",
+    "keywords": [
+        "แบต",
+        "แบตเตอรี่",
+        "battery",
+        "เช็คแบต",
+        "ตรวจแบต"
+    ]
 }
 
 
-def execute(args=None):
-    import device_actions
+def execute(context=None):
     return device_actions.check_battery()

@@ -8,5 +8,22 @@ def check_battery():
 
 
 def open_youtube():
-    os.system("termux-open https://youtube.com")
-    return "📺 เปิด YouTube แล้ว"
+    import subprocess
+
+    try:
+        subprocess.run(
+            [
+                "am",
+                "start",
+                "-n",
+                "com.google.android.youtube/com.google.android.youtube.HomeActivity"
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+
+        return "📺 เปิด YouTube แล้วครับนายท่าน"
+
+    except Exception as e:
+        return f"❌ เปิด YouTube ไม่สำเร็จ: {e}"
+
