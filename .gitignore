@@ -12,3 +12,11 @@ run.py.broken
 run.py.backup
 run.py.before_router_fix
 jarvis_mode.json
+*.backup
+
+*.backup*
+*.broken
+*.error
+*.db
+*.db-shm
+*.db-wal
