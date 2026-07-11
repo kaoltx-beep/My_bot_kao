@@ -29,6 +29,8 @@ def execute_plugin(text):
         return plugin.execute()
 
     return None
+
+
 def list_plugins():
     result = {}
 
@@ -59,10 +61,18 @@ def find_plugin_with_ai(text, ai_function):
 """
     )
 
+    # รองรับกรณี AI ส่งกลับเป็น JSON dict
+    if isinstance(result, dict):
+        result = result.get("reply", "")
+
+    # กัน error ถ้าไม่ใช่ข้อความ
+    if not isinstance(result, str):
+        return None
+
     result = result.strip().lower()
 
     for name in plugins:
-        if name in result:
+        if name.lower() in result:
             return name
 
     return None
