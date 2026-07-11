@@ -59,7 +59,10 @@ def find_plugin_with_ai(text, ai_function):
 """
     )
 
-    if result in plugins:
-        return result
+    result = result.strip().lower()
+
+    for name in plugins:
+        if name in result:
+            return name
 
     return None
