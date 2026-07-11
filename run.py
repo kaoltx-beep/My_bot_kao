@@ -132,10 +132,10 @@ def worker():
                 reply = "กลับโหมดปกติแล้วครับ"
             else:
                 result = ask_jarvis(text, history_text)
-                action = result.get("action") or fallback_intent(text)
+                action = fallback_intent(text) or result.get("action")
                 reply = result.get("reply") or "รับทราบครับ"
 
-                plugin_name = plugin_router.find_plugin_with_ai(text, lambda x: ask_jarvis(x).get("reply"))
+                plugin_name = PLUGIN_MAP.get(action)
 
                 if plugin_name:
                     plugin = plugin_loader.get_plugin(plugin_name)
@@ -146,7 +146,7 @@ def worker():
                         if plugin_name == "news":
                             reply = action_result
                         else:
-                            reply = apply_personality_to_action(action_result, history_text)
+                            reply = action_result
 
                 reply = reply.replace("ค่ะ","ครับ").replace("คะ","ครับ")
 
