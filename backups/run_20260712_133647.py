@@ -21,7 +21,6 @@ PLUGIN_MAP = {
     "monthly_expense": "expense",
     "list_expense": "expense",
     "task": "task",
-    "reminder": "reminder",
 }
 
 import memory_manager
@@ -57,9 +56,6 @@ def fallback_intent(text):
 
     if "บันทึกงาน" in text or "เพิ่มงาน" in text or "วันนี้มีงาน" in text or "ดูงาน" in text:
         return "task"
-
-    if "ตั้งเตือน" in text or "ดูรายการเตือน" in text or "ดูเตือน" in text:
-        return "reminder"
 
     import re
     if re.search(r".+\s+\d+", text):
