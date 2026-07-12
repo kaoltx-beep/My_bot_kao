@@ -19,7 +19,6 @@ PLUGIN_MAP = {
     "news": "news",
     "add_expense": "expense",
     "monthly_expense": "expense",
-    "list_expense": "expense",
 }
 
 import memory_manager
@@ -49,9 +48,6 @@ def fallback_intent(text):
 
     if "เดือนนี้" in text or "รายเดือน" in text:
         return "monthly_expense"
-
-    if "ดูรายจ่าย" in text or "รายการ" in text:
-        return "list_expense"
 
     import re
     if re.search(r".+\s+\d+", text):

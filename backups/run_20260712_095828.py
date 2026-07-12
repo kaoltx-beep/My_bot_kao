@@ -17,9 +17,6 @@ PLUGIN_MAP = {
     "check_battery": "battery",
     "open_youtube": "youtube",
     "news": "news",
-    "add_expense": "expense",
-    "monthly_expense": "expense",
-    "list_expense": "expense",
 }
 
 import memory_manager
@@ -46,16 +43,6 @@ def fallback_intent(text):
 
     if "ข่าว" in text or "news" in text:
         return "news"
-
-    if "เดือนนี้" in text or "รายเดือน" in text:
-        return "monthly_expense"
-
-    if "ดูรายจ่าย" in text or "รายการ" in text:
-        return "list_expense"
-
-    import re
-    if re.search(r".+\s+\d+", text):
-        return "add_expense"
 
     return None
 
@@ -146,9 +133,6 @@ def worker():
             else:
                 result = ask_jarvis(text, history_text)
                 action = fallback_intent(text) or result.get("action")
-
-                if isinstance(action, list):
-                    action = action[0] if action else None
                 reply = result.get("reply") or "รับทราบครับ"
 
                 plugin_name = PLUGIN_MAP.get(action)
@@ -157,7 +141,7 @@ def worker():
                     plugin = plugin_loader.get_plugin(plugin_name)
 
                     if plugin:
-                        action_result = plugin.execute(text)
+                        action_result = plugin.execute()
 
                         if plugin_name == "news":
                             reply = action_result

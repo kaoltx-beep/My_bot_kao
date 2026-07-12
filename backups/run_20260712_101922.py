@@ -18,8 +18,6 @@ PLUGIN_MAP = {
     "open_youtube": "youtube",
     "news": "news",
     "add_expense": "expense",
-    "monthly_expense": "expense",
-    "list_expense": "expense",
 }
 
 import memory_manager
@@ -46,12 +44,6 @@ def fallback_intent(text):
 
     if "ข่าว" in text or "news" in text:
         return "news"
-
-    if "เดือนนี้" in text or "รายเดือน" in text:
-        return "monthly_expense"
-
-    if "ดูรายจ่าย" in text or "รายการ" in text:
-        return "list_expense"
 
     import re
     if re.search(r".+\s+\d+", text):
