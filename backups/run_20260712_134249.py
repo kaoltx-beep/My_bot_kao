@@ -27,7 +27,6 @@ PLUGIN_MAP = {
 import memory_manager
 import tts
 import voice_stt
-import reminder_worker
 
 from fastapi import FastAPI
 import uvicorn
@@ -226,14 +225,6 @@ def voice_worker():
             print("Voice Error:", e)
             time.sleep(3)
 
-
-
-def send_reminder_message(message):
-    try:
-        bot.send_message(config.TELEGRAM_CHAT_ID, message)
-    except Exception as e:
-        print("Reminder Send Error:", e)
-
 app = FastAPI()
 
 @app.get("/pulse")
@@ -243,7 +234,6 @@ def pulse():
 
 if __name__ == "__main__":
     threading.Thread(target=worker, daemon=True).start()
-    threading.Thread(target=reminder_worker.worker, args=(send_reminder_message,), daemon=True).start()
     threading.Thread(target=bot.infinity_polling, daemon=True).start()
   # threading.Thread(target=voice_worker, daemon=True).start()
     print("Jarvis started")
