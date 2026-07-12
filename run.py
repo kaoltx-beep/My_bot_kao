@@ -24,7 +24,7 @@ PLUGIN_MAP = {
     "reminder": "reminder",
 }
 
-import memory_manager
+import memory_manager_v2 as memory_manager
 import tts
 import voice_stt
 import reminder_worker
