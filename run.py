@@ -154,7 +154,7 @@ def worker():
                 reply = "กลับโหมดปกติแล้วครับ"
             else:
                 result = ask_jarvis(text, history_text)
-                action = fallback_intent(text) or result.get("action")
+                action = result.get("action") or fallback_intent(text)
 
                 if isinstance(action, list):
                     action = action[0] if action else None
