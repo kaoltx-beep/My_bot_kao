@@ -4,7 +4,7 @@ __pycache__/
 *.db
 *.db-shm
 *.db-wal
-
+ .env
 *.log
 
 run.py.error

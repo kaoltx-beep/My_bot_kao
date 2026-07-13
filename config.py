@@ -1,6 +1,12 @@
-TELEGRAM_TOKEN = "8863565201:AAFtQDDIYb5D3hH0VnFQGGkO87Jp3RLfeaY"
-GROQ_API_KEY = "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"
-MACRODROID_WEBHOOK_URL = "https://trigger.macrodroid.com/7bb8728a-379b-4377-8e60-8cbd868cfe62/vanced"
-LOG_FILE = "data/logs/android_control.jsonl"
+import os
+from dotenv import load_dotenv
 
-TELEGRAM_CHAT_ID = 8450602649
+load_dotenv()
+
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+MACRODROID_WEBHOOK_URL = os.getenv("MACRODROID_WEBHOOK_URL")
+
+LOG_FILE = "data/logs/app.log"
+
+TELEGRAM_CHAT_ID = int(os.getenv("TELEGRAM_CHAT_ID", 0))
