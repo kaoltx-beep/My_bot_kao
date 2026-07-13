@@ -2,6 +2,7 @@ import threading
 import time
 import logging
 import json
+import traceback
 from queue import Queue
 import telebot
 from groq import Groq
@@ -53,7 +54,7 @@ def fallback_intent(text):
     if "เดือนนี้" in text or "รายเดือน" in text:
         return "monthly_expense"
 
-    if "ดูรายจ่าย" in text or "รายการ" in text:
+    if "ดูรายจ่าย" in text or "รายการรายจ่าย" in text:
         return "list_expense"
 
     if "บันทึกงาน" in text or "เพิ่มงาน" in text or "วันนี้มีงาน" in text or "ดูงาน" in text:
@@ -154,7 +155,7 @@ def worker():
                 reply = "กลับโหมดปกติแล้วครับ"
             else:
                 result = ask_jarvis(text, history_text)
-                action = result.get("action") or fallback_intent(text)
+                action = fallback_intent(text) or result.get("action")
 
                 if isinstance(action, list):
                     action = action[0] if action else None
@@ -188,7 +189,7 @@ def worker():
             memory_manager.save_memory(text, reply)
 
         except Exception as e:
-            print("Worker Error:",e)
+            traceback.print_exc()
         finally:
             task_queue.task_done()
 
@@ -239,6 +240,14 @@ app = FastAPI()
 @app.get("/pulse")
 def pulse():
     return {"status":"ok","queue":task_queue.qsize(),"time":time.time()}
+
+
+
+
+@app.post("/webhook/feedback")
+def webhook_feedback(data: dict):
+    print("MacroDroid Feedback:", data)
+    return {"status":"ok"}
 
 
 if __name__ == "__main__":

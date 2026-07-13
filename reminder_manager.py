@@ -59,3 +59,19 @@ def list_reminders():
 
 
 init()
+
+
+def delete_reminder(reminder_id):
+    conn = sqlite3.connect(DB)
+    c = conn.cursor()
+
+    c.execute("DELETE FROM reminders WHERE id=?", (reminder_id,))
+    deleted = c.rowcount
+
+    conn.commit()
+    conn.close()
+
+    if deleted:
+        return f"🗑️ ลบรายการเตือน #{reminder_id} แล้ว"
+
+    return "❌ ไม่พบรายการเตือน"
