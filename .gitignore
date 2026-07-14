@@ -20,3 +20,5 @@ jarvis_mode.json
 *.db
 *.db-shm
 *.db-wal
+credentials/
+*.json

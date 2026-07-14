@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Jarvis Dashboard</title>
+<style>
+body{
+font-family:sans-serif;
+background:#111;
+color:white;
+padding:20px;
+}
+.card{
+background:#222;
+padding:15px;
+border-radius:10px;
+margin:10px 0;
+}
+h1{color:#00ff99;}
+</style>
+</head>
+
+<body>
+
+<h1>🤖 Jarvis Dashboard</h1>
+
+<div class="card" id="status">กำลังโหลด...</div>
+<div class="card" id="jobs"></div>
+<div class="card" id="expenses"></div>
+
+<script>
+fetch('/status')
+.then(r=>r.json())
+.then(data=>{
+document.getElementById('status').innerHTML =
+"สถานะ: "+data.jarvis;
+
+document.getElementById('jobs').innerHTML =
+"<h3>📋 งานล่าสุด</h3><pre>"+data.jobs+"</pre>";
+
+document.getElementById('expenses').innerHTML =
+"<h3>💰 รายจ่าย</h3>"+data.expenses;
+});
+</script>
+
+</body>
+</html>

@@ -10,9 +10,14 @@ from groq import Groq
 import config
 import device_actions
 import plugin_loader
+from job_database import list_jobs, search_jobs, pending_jobs
+from expense_manager import monthly_summary
 import plugin_router
+import intent_router
 plugin_loader.load_plugins()
 import personality
+import smart_router
+import auto_work
 
 PLUGIN_MAP = {
     "check_battery": "battery",
@@ -23,6 +28,7 @@ PLUGIN_MAP = {
     "list_expense": "expense",
     "task": "task",
     "reminder": "reminder",
+    "work": "work",
 }
 
 import memory_manager_v2 as memory_manager
@@ -31,6 +37,7 @@ import voice_stt
 import reminder_worker
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 import uvicorn
 
 logging.basicConfig(level=logging.ERROR)
@@ -57,7 +64,16 @@ def fallback_intent(text):
     if "ดูรายจ่าย" in text or "รายการรายจ่าย" in text:
         return "list_expense"
 
-    if "บันทึกงาน" in text or "เพิ่มงาน" in text or "วันนี้มีงาน" in text or "ดูงาน" in text:
+    if "ติดตั้ง" in text or "งานติดตั้ง" in text:
+        return "work"
+
+    if "ดูงานทั้งหมด" in text:
+        return "list_jobs"
+
+    if "งานที่" in text:
+        return "search_jobs"
+
+    if "บันทึกงาน" in text or "เพิ่มงาน" in text or "วันนี้มีงาน" in text:
         return "task"
 
     if "ตั้งเตือน" in text or "ดูรายการเตือน" in text or "ดูเตือน" in text:
@@ -137,6 +153,8 @@ def worker():
         try:
             chat_id = task["chat_id"]
             text = task["text"]
+
+            auto_saved = auto_work.save_auto_work(text)
             history = task["history"]
             history_text = "\n".join([f"User:{u}\nJarvis:{b}" for u,b in history])
 
@@ -155,13 +173,29 @@ def worker():
                 reply = "กลับโหมดปกติแล้วครับ"
             else:
                 result = ask_jarvis(text, history_text)
-                action = fallback_intent(text) or result.get("action")
+                action = intent_router.classify(text) or fallback_intent(text) or result.get("action")
 
                 if isinstance(action, list):
                     action = action[0] if action else None
-                reply = result.get("reply") or "รับทราบครับ"
+                if auto_saved == "duplicate":
+                    reply = "งานนี้ผมบันทึกไว้แล้วครับ"
+                elif auto_saved is True:
+                    reply = "บันทึกงานติดตั้งไฟเบอร์เสร็จแล้วครับ"
+                else:
+                  if action == "list_jobs":
+                      reply = list_jobs()
 
-                plugin_name = PLUGIN_MAP.get(action)
+                  elif action == "search_jobs":
+                      area = text.replace("งานที่", "").strip()
+                      reply = search_jobs(area)
+
+                  elif action == "pending_jobs":
+                      reply = pending_jobs()
+
+                  else:
+                      reply = result.get("reply") or "รับทราบครับ"
+
+                plugin_name = None if auto_saved else PLUGIN_MAP.get(action)
 
                 if plugin_name:
                     plugin = plugin_loader.get_plugin(plugin_name)
@@ -236,10 +270,31 @@ def send_reminder_message(message):
         print("Reminder Send Error:", e)
 
 app = FastAPI()
+app.mount("/dashboard", StaticFiles(directory="dashboard", html=True), name="dashboard")
 
 @app.get("/pulse")
 def pulse():
     return {"status":"ok","queue":task_queue.qsize(),"time":time.time()}
+
+@app.get("/status")
+def status():
+    try:
+        jobs = list_jobs()
+    except Exception as e:
+        jobs = str(e)
+
+    try:
+        expenses = monthly_summary()
+    except Exception as e:
+        expenses = str(e)
+
+    return {
+        "jarvis": "online",
+        "queue": task_queue.qsize(),
+        "jobs": jobs,
+        "expenses": expenses,
+        "time": time.time()
+    }
 
 
 

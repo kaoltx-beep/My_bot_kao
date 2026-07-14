@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard ส่วนตัว</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Prompt', sans-serif;
+            background-image: url('00.jpg');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            background-repeat: no-repeat;
+        }
+        .glass-container {
+            background: rgba(255, 255, 255, 0.35);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-start p-4 bg-slate-900/10">
+
+    <!-- ส่วนหัว: นาฬิกาดิจิทัลขนาดใหญ่ -->
+    <div class="w-full max-w-md text-center text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.7)] my-6">
+        <div id="clock" class="text-6xl font-bold tracking-wider font-mono">00:00:00</div>
+        <div id="date" class="text-base font-medium mt-2 bg-black/20 px-4 py-1 rounded-full inline-block backdrop-blur-md border border-white/10">วัน... ที่ ...</div>
+    </div>
+
+    <!-- แดชบอร์ดหลัก -->
+    <div class="w-full max-w-md glass-container rounded-3xl p-5 shadow-2xl flex flex-col gap-5 mb-8">
+        
+        <div class="flex items-center gap-2 pb-2 border-b border-white/20">
+            <span class="text-2xl">🚀</span>
+            <h1 class="text-xl font-bold text-gray-800">Dashboard ส่วนตัว</h1>
+        </div>
+
+        <!-- โซเชียล -->
+        <div>
+            <h2 class="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">📱 โซเชียล</h2>
+            <div class="grid grid-cols-2 gap-2">
+                <a href="https://line.me/" target="_blank" class="flex items-center justify-center p-3 rounded-xl font-semibold text-white shadow-md transition-transform active:scale-95 bg-[#06C755]">LINE</a>
+                <a href="https://t.me/" target="_blank" class="flex items-center justify-center p-3 rounded-xl font-semibold text-white shadow-md transition-transform active:scale-95 bg-[#229ED9]">Telegram</a>
+                <a href="https://www.facebook.com/" target="_blank" class="flex items-center justify-center p-3 rounded-xl font-semibold text-white shadow-md transition-transform active:scale-95 bg-[#1877F2]">Facebook</a>
+                <a href="https://www.tiktok.com/" target="_blank" class="flex items-center justify-center p-3 rounded-xl font-semibold text-white shadow-md transition-transform active:scale-95 bg-[#000000]">TikTok</a>
+            </div>
+        </div>
+
+        <!-- Google -->
+        <div>
+            <h2 class="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">🌐 Google</h2>
+            <div class="grid grid-cols-2 gap-2">
+                <a href="https://mail.google.com/" target="_blank" class="flex items-center justify-center p-3 rounded-xl font-semibold text-white shadow-md transition-transform active:scale-95 bg-[#EA4335]">Gmail</a>
+                <a href="https://docs.google.com/spreadsheets/" target="_blank" class="flex items-center justify-center p-3 rounded-xl font-semibold text-white shadow-md transition-transform active:scale-95 bg-[#14A44D]">Google Sheets</a>
+                <a href="https://drive.google.com/" target="_blank" class="flex items-center justify-center p-3 rounded-xl font-semibold text-white shadow-md transition-transform active:scale-95 bg-[#4285F4]">Google Drive</a>
+                <a href="https://calendar.google.com/" target="_blank" class="flex items-center justify-center p-3 rounded-xl font-semibold text-white shadow-md transition-transform active:scale-95 bg-[#4285F4]">Google Calendar</a>
+                <a href="https://maps.google.com/" target="_blank" class="flex items-center justify-center p-3 rounded-xl font-semibold text-white shadow-md transition-transform active:scale-95 bg-[#34A853] col-span-2">Google Maps</a>
+                <a href="https://myaccount.google.com/" target="_blank" class="flex items-center justify-center p-3 rounded-xl font-semibold text-white shadow-md transition-transform active:scale-95 bg-[#6c757d] col-span-2">Google Services (หน้ารวม)</a>
+            </div>
+        </div>
+
+        <!-- AI -->
+        <div>
+            <h2 class="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">🤖 AI</h2>
+            <div class="grid grid-cols-2 gap-2">
+                <a href="https://chatgpt.com/" target="_blank" class="flex items-center justify-center p-3 rounded-xl font-semibold text-white shadow-md transition-transform active:scale-95 bg-[#10a37f]">ChatGPT</a>
+                <a href="https://gemini.google.com/" target="_blank" class="flex items-center justify-center p-3 rounded-xl font-semibold text-white shadow-md transition-transform active:scale-95 bg-[#1a73e8]">Gemini</a>
+            </div>
+        </div>
+
+        <!-- วิดีโอ & เพลง -->
+        <div>
+            <h2 class="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">🎬 วิดีโอ & เพลง</h2>
+            <div class="grid grid-cols-2 gap-2">
+                <a href="https://www.youtube.com/" target="_blank" class="flex items-center justify-center p-3 rounded-xl font-semibold text-white shadow-md transition-transform active:scale-95 bg-[#FF0000]">YouTube</a>
+                <a href="https://vancedapp.com/" target="_blank" class="flex items-center justify-center p-3 rounded-xl font-semibold text-white shadow-md transition-transform active:scale-95 bg-[#2e1e5b]">YouTube Vanced</a>
+            </div>
+        </div>
+
+        <!-- เครื่องมือ & พัฒนาระบบ -->
+        <div>
+            <h2 class="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">🛠️ เครื่องมือ & พัฒนาระบบ</h2>
+            <div class="grid grid-cols-2 gap-2">
+                <a href="intent://#Intent;scheme=pydroid3;package=ru.iiec.pydroid3;end" class="flex items-center justify-center p-3 rounded-xl font-semibold text-white shadow-md transition-transform active:scale-95 bg-[#3072b4]">Pydroid 3</a>
+                <a href="intent://#Intent;scheme=macrodroid;package=com.arlosoft.macrodroid;end" class="flex items-center justify-center p-3 rounded-xl font-semibold text-white shadow-md transition-transform active:scale-95 bg-[#009688]">MacroDroid</a>
+            </div>
+        </div>
+
+        <!-- บริการรัฐบาล -->
+        <div>
+            <h2 class="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">🏛️ บริการรัฐบาล</h2>
+            <div class="grid grid-cols-2 gap-2">
+                <a href="intent://#Intent;scheme=thaid;package=th.go.dopa.bora.identity.digital;end" class="flex items-center justify-center p-3 rounded-xl font-semibold text-white shadow-md transition-transform active:scale-95 bg-[#0a2240]">ThaID (ไทยไอดี)</a>
+                <a href="intent://#Intent;scheme=thangrath;package=th.go.dga.thangrath;end" class="flex items-center justify-center p-3 rounded-xl font-semibold text-white shadow-md transition-transform active:scale-95 bg-[#007bff]">ทางรัฐ</a>
+            </div>
+        </div>
+
+        <!-- ระบบเครื่องมือถือ -->
+        <div>
+            <h2 class="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">⚙️ ระบบเครื่องมือถือ</h2>
+            <div class="grid grid-cols-2 gap-2">
+                <a href="intent://#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package=com.sec.android.app.myfiles;end" class="flex items-center justify-center p-3 rounded-xl font-semibold text-white shadow-md transition-transform active:scale-95 bg-[#EC7E30]">ไฟล์ของฉัน</a>
+                <a href="intent://#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package=com.duokan.phone.remotecontroller;end" class="flex items-center justify-center p-3 rounded-xl font-semibold text-white shadow-md transition-transform active:scale-95 bg-[#E53935]">รีโมท IR</a>
+            </div>
+        </div>
+
+        <!-- โน้ตวันนี้ -->
+        <div class="pt-2 border-t border-white/20">
+            <h2 class="text-xs font-bold text-gray-800 uppercase tracking-wider mb-2">📝 โน้ตวันนี้ (เซฟอัตโนมัติ)</h2>
+            <textarea id="notepad" class="w-full h-28 p-3 rounded-xl bg-white/70 focus:bg-white text-gray-800 placeholder-gray-500 text-sm outline-none resize-none transition-all border border-white/40 shadow-inner" placeholder="พิมพ์โน้ตไว้ตรงนี้... ระบบจะบันทึกให้อัตโนมัติ ปิดเว็บไม่หาย"></textarea>
+        </div>
+
+    </div>
+
+    <script>
+        // ระบบนาฬิกาและวันที่ภาษาไทย
+        function updateClock() {
+            const now = new Date();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            document.getElementById('clock').textContent = `${hours}:${minutes}:${seconds}`;
+            
+            const days = ['วันอาทิตย์', 'วันจันทร์', 'วันอังคาร', 'วันพุธ', 'วันพฤหัสบดี', 'วันศุกร์', 'วันเสาร์'];
+            const months = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+            
+            document.getElementById('date').textContent = `${days[now.getDay()]}ที่ ${now.getDate()} ${months[now.getMonth()]} พ.ศ. ${now.getFullYear() + 543}`;
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // ระบบบันทึกโน้ต (LocalStorage)
+        const notepad = document.getElementById('notepad');
+        if (localStorage.getItem('dashboard_notes_data')) {
+            notepad.value = localStorage.getItem('dashboard_notes_data');
+        }
+        notepad.addEventListener('input', () => {
+            localStorage.setItem('dashboard_notes_data', notepad.value);
+        });
+
+        // เปิดระบบเสียงแบบ Global เพื่อไม่ให้บราวเซอร์บล็อก
+        let audioCtx = null;
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function playClickSound() {
+            initAudio();
+            if (!audioCtx) return;
+
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(800, audioCtx.currentTime); 
+            oscillator.frequency.exponentialRampToValueAtTime(400, audioCtx.currentTime + 0.08);
+            
+            gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+            
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.08);
+        }
+
+        // สั่งให้ส่งเสียงทันทีเมื่อนิ้วเริ่มแตะโดนปุ่ม (เร็วที่สุดก่อนแอปเปิด)
+        document.querySelectorAll('a').forEach(button => {
+            button.addEventListener('pointerdown', () => {
+                playClickSound();
+            });
+        });
+    </script>
+</body>
+</html>

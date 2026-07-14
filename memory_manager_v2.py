@@ -2,6 +2,8 @@ import sqlite3
 import time
 from pathlib import Path
 
+from memory_google import save_memory as save_google_memory
+
 DB_PATH = Path("jarvis_memory.db")
 
 
@@ -53,6 +55,14 @@ def save_memory(user, bot):
     conn.commit()
     conn.close()
 
+    try:
+        save_google_memory(
+            user,
+            bot
+        )
+    except Exception as e:
+        print("Google Memory Backup Error:", e)
+
 
 def get_memory(limit=5):
     conn = sqlite3.connect(DB_PATH)
@@ -86,9 +96,12 @@ def get_fact(key):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
 
-    cur.execute("SELECT value FROM facts WHERE key=?", (key,))
-    result = cur.fetchone()
+    cur.execute(
+        "SELECT value FROM facts WHERE key=?",
+        (key,)
+    )
 
+    result = cur.fetchone()
     conn.close()
 
     return result[0] if result else None
@@ -111,9 +124,12 @@ def get_profile(key):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
 
-    cur.execute("SELECT value FROM user_profile WHERE key=?", (key,))
-    result = cur.fetchone()
+    cur.execute(
+        "SELECT value FROM user_profile WHERE key=?",
+        (key,)
+    )
 
+    result = cur.fetchone()
     conn.close()
 
     return result[0] if result else None

@@ -1,14 +1,16 @@
 def classify(text):
     text = text.lower()
 
-    intents = {
-        "check_battery": ["แบต", "battery", "แบตเตอรี่"],
-        "open_youtube": ["youtube", "ยูทูป", "เปิดเพลง"],
-    }
+    if any(x in text for x in ["ติดตั้ง", "ไฟเบอร์", "fiber", "3bb", "true", "ais"]):
+        return "task"
 
-    for action, keywords in intents.items():
-        for word in keywords:
-            if word in text:
-                return action
+    if any(x in text for x in ["บาท", "ซื้อ", "จ่าย", "ค่า", "เงิน"]):
+        return "add_expense"
+
+    if any(x in text for x in ["แบต", "battery", "แบตเตอรี่"]):
+        return "check_battery"
+
+    if any(x in text for x in ["youtube", "ยูทูป", "เปิดเพลง"]):
+        return "open_youtube"
 
     return None
