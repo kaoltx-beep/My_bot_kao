@@ -2,7 +2,7 @@ def classify(text):
     text = text.lower()
 
     if any(x in text for x in ["ติดตั้ง", "ไฟเบอร์", "fiber", "3bb", "true", "ais"]):
-        return "task"
+        return "work"
 
     if any(x in text for x in ["บาท", "ซื้อ", "จ่าย", "ค่า", "เงิน"]):
         return "add_expense"
