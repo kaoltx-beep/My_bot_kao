@@ -16,7 +16,7 @@ import plugin_router
 import intent_router
 plugin_loader.load_plugins()
 import personality
-import smart_router
+import smart_router  # noqa: F401 – stub kept for compat
 import auto_work
 
 PLUGIN_MAP = {
@@ -36,16 +36,36 @@ import tts
 import voice_stt
 import reminder_worker
 
-from fastapi import FastAPI
+import os
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 
+_DASHBOARD_TOKEN = os.getenv("DASHBOARD_TOKEN", "")
+
+
+def _check_dashboard_auth(x_dashboard_token: str = Header(default=None)):
+    """Require X-Dashboard-Token header when DASHBOARD_TOKEN env var is set."""
+    if _DASHBOARD_TOKEN and x_dashboard_token != _DASHBOARD_TOKEN:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
 logging.basicConfig(level=logging.ERROR)
+logger = logging.getLogger(__name__)
 
 bot = telebot.TeleBot(config.TELEGRAM_TOKEN)
 client = Groq(api_key=config.GROQ_API_KEY)
 
 task_queue = Queue()
+
+
+def _send_admin_alert(error_text: str):
+    """Send a crash/error notification to the admin chat."""
+    try:
+        if config.TELEGRAM_CHAT_ID:
+            short = str(error_text)[:500]
+            bot.send_message(config.TELEGRAM_CHAT_ID, f"⚠️ Jarvis Error:\n{short}")
+    except Exception:
+        pass  # Never let error reporting itself crash the bot
 
 
 def fallback_intent(text):
@@ -224,17 +244,26 @@ def worker():
 
         except Exception as e:
             traceback.print_exc()
+            _send_admin_alert(traceback.format_exc())
         finally:
             task_queue.task_done()
 
 
 @bot.message_handler(func=lambda m: True)
 def handle(m):
+    # Security: drop messages from unknown senders
+    if config.TELEGRAM_CHAT_ID and m.chat.id != config.TELEGRAM_CHAT_ID:
+        logger.warning("Blocked message from unauthorized chat_id=%s", m.chat.id)
+        return
     if m.text:
+        # Sanitise input: strip whitespace, enforce max length
+        text = m.text.strip()[:2000]
+        if not text:
+            return
         task_queue.put({
-            "chat_id":m.chat.id,
-            "text":m.text,
-            "history":memory_manager.get_memory(5)
+            "chat_id": m.chat.id,
+            "text": text,
+            "history": memory_manager.get_memory(5)
         })
 
 
@@ -272,11 +301,12 @@ def send_reminder_message(message):
 app = FastAPI()
 app.mount("/dashboard", StaticFiles(directory="dashboard", html=True), name="dashboard")
 
-@app.get("/pulse")
+@app.get("/pulse", dependencies=[])
 def pulse():
-    return {"status":"ok","queue":task_queue.qsize(),"time":time.time()}
+    return {"status": "ok", "queue": task_queue.qsize(), "time": time.time()}
 
-@app.get("/status")
+
+@app.get("/status", dependencies=[])
 def status():
     try:
         jobs = list_jobs()
