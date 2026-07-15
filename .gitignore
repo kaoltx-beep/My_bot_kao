@@ -1,24 +1,58 @@
+# ─── Python bytecode ────────────────────────────────────────────────────────
 __pycache__/
+*.py[cod]
+*$py.class
 *.pyc
 
+# ─── Environment / secrets ──────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ─── Databases ──────────────────────────────────────────────────────────────
 *.db
 *.db-shm
 *.db-wal
- .env
+*.sqlite
+*.sqlite3
+
+# ─── Log files ──────────────────────────────────────────────────────────────
 *.log
+logs/
 
-run.py.error
-run.py.broken
-run.py.backup
-run.py.before_router_fix
-jarvis_mode.json
+# ─── Backup / scratch files ─────────────────────────────────────────────────
+*.bak
 *.backup
-
-*.backup*
+*.before_*
+*.good
 *.broken
 *.error
-*.db
-*.db-shm
-*.db-wal
+*.old
+*.youtube_working
+
+# ─── Binary / media assets ──────────────────────────────────────────────────
+*.mp3
+*.wav
+*.ogg
+jarvis
+
+# ─── Google / OAuth credentials ─────────────────────────────────────────────
+service_account.json
 credentials/
-*.json
+credentials.json
+token.json
+token.pickle
+*.pem
+*.key
+
+# ─── OS ─────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ─── IDE ────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+
+# ─── Build artifacts ────────────────────────────────────────────────────────
+dist/
+build/
