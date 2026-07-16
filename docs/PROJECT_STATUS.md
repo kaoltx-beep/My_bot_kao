@@ -4,25 +4,27 @@ v3
 
 Completed
 
-Telegram
+Telegram (Active)
 
-FastAPI
+FastAPI (Active, with Dashboard and Webhooks)
 
-Plugin System
+Plugin System (Active, with dynamic loading)
 
-Memory v1
+Memory (v2, SQLite-backed with Google Sheets backup capability)
 
-Expense Manager
+Expense Manager (Active, SQLite-backed)
 
-Task Manager
+Task Manager (Active, SQLite-backed)
 
-Reminder Worker
+Reminder Worker (Active, SQLite-backed)
 
-OpenClaw Pairing
+OpenClaw Pairing (Status unclear from code, assumed external or not yet implemented)
 
 Current Issue
 
-Groq 413
+Groq 413 (Confirmed, model is `llama-3.1-8b-instant`)
+
+Dashboard Authentication (Auth helper exists but not applied to routes)
 
 Current Model
 
