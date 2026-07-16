@@ -37,7 +37,7 @@ import voice_stt
 import reminder_worker
 
 import os
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Depends
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 
@@ -310,12 +310,12 @@ def send_reminder_message(message):
 app = FastAPI()
 app.mount("/dashboard", StaticFiles(directory="dashboard", html=True), name="dashboard")
 
-@app.get("/pulse", dependencies=[])
+@app.get("/pulse", dependencies=[Depends(_check_dashboard_auth)])
 def pulse():
     return {"status": "ok", "queue": task_queue.qsize(), "time": time.time()}
 
 
-@app.get("/status", dependencies=[])
+@app.get("/status", dependencies=[Depends(_check_dashboard_auth)])
 def status():
     try:
         jobs = list_jobs()

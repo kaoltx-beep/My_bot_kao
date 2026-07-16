@@ -24,7 +24,7 @@ Current Issue
 
 Groq 413 (Mitigated by context limiting, model is `llama-3.1-8b-instant`)
 
-Dashboard Authentication (Auth helper exists but not applied to routes)
+Dashboard Authentication (Implemented for /pulse and /status routes)
 
 Current Model
 

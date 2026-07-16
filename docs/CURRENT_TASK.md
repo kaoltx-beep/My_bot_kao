@@ -1,6 +1,6 @@
 Task
 
-Fix Groq 413
+Implement Dashboard Authentication
 
 Progress
 
@@ -8,10 +8,8 @@ Progress
 
 Completed
 
-✔ Change Model
-✔ Reduce Context
-✔ Test Telegram
-✔ Commit
+✔ Apply authentication to /pulse and /status routes
+✔ Test all existing endpoints
 
 Remaining
 
