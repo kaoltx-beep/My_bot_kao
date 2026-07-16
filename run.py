@@ -107,6 +107,12 @@ def fallback_intent(text):
 
 
 def ask_jarvis(user_message, history_text=""):
+    # Limit history_text to prevent Groq 413 error
+    # Keeping only the last 3000 characters of history as a safety measure
+    max_context_chars = 3000
+    if len(history_text) > max_context_chars:
+        history_text = "..." + history_text[-max_context_chars:]
+
     system_instruction = """
     คุณคือ Jarvis ผู้ช่วย AI ส่วนตัว
     ตอบภาษาไทยเท่านั้น
@@ -176,12 +182,15 @@ def worker():
 
             auto_saved = auto_work.save_auto_work(text)
             history = task["history"]
+            # history from task might overlap with db_memory, but we'll keep it simple for now
+            # and let the character limit in ask_jarvis handle the total size.
             history_text = "\n".join([f"User:{u}\nJarvis:{b}" for u,b in history])
 
-            db_memory = memory_manager.get_memory(5)
+            # Reduce DB memory lookup to 3 instead of 5 to further save context
+            db_memory = memory_manager.get_memory(3)
 
             if db_memory:
-                history_text += "\n\n" + "\n".join(
+                history_text += "\n\n[Previous Memory]\n" + "\n".join(
                     [f"User:{u}\nJarvis:{b}" for u,b in db_memory]
                 )
 

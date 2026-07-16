@@ -22,7 +22,7 @@ OpenClaw Pairing (Status unclear from code, assumed external or not yet implemen
 
 Current Issue
 
-Groq 413 (Confirmed, model is `llama-3.1-8b-instant`)
+Groq 413 (Mitigated by context limiting, model is `llama-3.1-8b-instant`)
 
 Dashboard Authentication (Auth helper exists but not applied to routes)
 
