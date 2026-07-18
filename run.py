@@ -243,7 +243,7 @@ def worker():
             print("DEBUG REPLY:", reply)
 
             if chat_id:
-                bot.send_message(chat_id, reply)
+                bot.send_message(chat_id, reply, reply_markup=get_main_keyboard())
             try:
                 tts.speak(reply)
             except Exception as e:
@@ -256,6 +256,35 @@ def worker():
             _send_admin_alert(traceback.format_exc())
         finally:
             task_queue.task_done()
+
+
+def get_main_keyboard():
+    """สร้าง Telegram Reply Keyboard ภาษาไทย"""
+    keyboard = telebot.types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
+    buttons = [
+        telebot.types.KeyboardButton("🤖 Jarvis Menu"),
+        telebot.types.KeyboardButton("📋 งานล่าสุด"),
+        telebot.types.KeyboardButton("💰 รายจ่าย"),
+        telebot.types.KeyboardButton("➕ เพิ่มงาน"),
+        telebot.types.KeyboardButton("💵 เพิ่มค่าใช้จ่าย"),
+        telebot.types.KeyboardButton("🧠 ความจำ"),
+        telebot.types.KeyboardButton("📊 รายงาน"),
+        telebot.types.KeyboardButton("🔋 สถานะเครื่อง"),
+        telebot.types.KeyboardButton("❓ ช่วยเหลือ"),
+    ]
+    keyboard.add(*buttons)
+    return keyboard
+
+
+@bot.message_handler(commands=['start'])
+def handle_start(m):
+    """ตอบสนองคำสั่ง /start และแสดง Keyboard"""
+    if config.TELEGRAM_CHAT_ID and m.chat.id != config.TELEGRAM_CHAT_ID:
+        logger.warning("Blocked message from unauthorized chat_id=%s", m.chat.id)
+        return
+    
+    welcome_message = "สวัสดีครับ! ผมคือ Jarvis ผู้ช่วย AI ของคุณ\n\nเลือกเมนูด้านล่างครับ"
+    bot.send_message(m.chat.id, welcome_message, reply_markup=get_main_keyboard())
 
 
 @bot.message_handler(func=lambda m: True)

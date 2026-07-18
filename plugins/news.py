@@ -1,4 +1,7 @@
 import requests
+import json
+from groq import Groq
+import os
 
 METADATA = {
     "name": "news",
@@ -12,7 +15,7 @@ METADATA = {
 }
 
 
-def execute():
+def execute(text=None):
     try:
         url = "https://api.spaceflightnewsapi.net/v4/articles/?limit=5"
 
@@ -30,9 +33,28 @@ def execute():
             title = item.get("title", "")
             summary = item.get("summary", "")
 
+            # แปลข่าวเป็นภาษาไทยโดยใช้ Groq API
+            try:
+                groq_key = os.getenv("GROQ_API_KEY", "")
+                if groq_key:
+                    client = Groq(api_key=groq_key)
+                    translation = client.chat.completions.create(
+                        model="llama-3.1-8b-instant",
+                        messages=[
+                            {"role": "system", "content": "คุณเป็นนักแปลภาษาอังกฤษเป็นไทย แปลให้สั้นกระชับ"},
+                            {"role": "user", "content": f"แปลเป็นไทย:\n{title}"}
+                        ],
+                        max_tokens=100
+                    )
+                    thai_title = translation.choices[0].message.content.strip()
+                else:
+                    thai_title = title
+            except:
+                thai_title = title
+
             result += f"""
 ข่าวที่ {i}
-หัวข้อ: {title}
+หัวข้อ: {thai_title}
 
 รายละเอียด:
 {summary[:200]}
