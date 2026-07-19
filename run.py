@@ -99,12 +99,18 @@ def worker():
 
             history_text = "\n".join([f"U:{u} B:{b}" for u, b in history])
 
-            result = ask_jarvis(text, history_text)
+            import plugin_router
 
-            action = result.get("action") or fallback_intent(text)
-            reply = result.get("reply") or "รับทราบ"
+            plugin_reply = plugin_router.execute_plugin(text)
 
-            if action in ACTION_MAP:
+            if plugin_reply:
+                reply = plugin_reply
+            else:
+                result = ask_jarvis(text, history_text)
+                action = result.get("action") or fallback_intent(text)
+                reply = result.get("reply") or "รับทราบ"
+
+            if "action" in locals() and action in ACTION_MAP:
                 try:
                     reply = ACTION_MAP[action]()
                 except Exception as e:

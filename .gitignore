@@ -3,3 +3,15 @@ __pycache__/
 *.db
 *.db-shm
 *.db-wal
+
+.env
+credentials/
+*.log
+*.backup*
+*.before*
+*.broken
+*.error
+*.tar.gz
+test_photos/
+jarvis-assistant-*.json
+jarvis_mode.json
