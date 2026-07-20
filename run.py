@@ -14,6 +14,7 @@ import tts
 
 from fastapi import FastAPI
 import uvicorn
+from developer.dev_router import handle_developer_request
 
 # ------------------
 # STATUS
@@ -91,6 +92,7 @@ def worker():
         task = task_queue.get()
 
         reply = ""   # 🔥 กันพัง
+        action = None
 
         try:
             chat_id = task["chat_id"]
@@ -106,11 +108,18 @@ def worker():
             if plugin_reply:
                 reply = plugin_reply
             else:
+                dev_result = handle_developer_request(text)
+
+                if dev_result:
+                    reply = str(dev_result)
+                    bot.send_message(chat_id, reply)
+                    continue
+
                 result = ask_jarvis(text, history_text)
                 action = result.get("action") or fallback_intent(text)
                 reply = result.get("reply") or "รับทราบ"
 
-            if "action" in locals() and action in ACTION_MAP:
+            if action and action in ACTION_MAP:
                 try:
                     reply = ACTION_MAP[action]()
                 except Exception as e:
