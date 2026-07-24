@@ -72,3 +72,55 @@ def monthly_summary():
     conn.close()
 
     return f"📊 ค่าใช้จ่ายเดือนนี้รวม {total} บาท"
+
+
+def sum_expenses_weekly():
+    conn = sqlite3.connect(DB)
+    c = conn.cursor()
+
+    current_date = datetime.now()
+    start_date = current_date - datetime.timedelta(days=7)
+
+    month = current_date.strftime("%Y-%m")
+    start_month = start_date.strftime("%Y-%m")
+
+    c.execute("SELECT SUM(amount) FROM expenses WHERE date LIKE ? AND date LIKE ?", (month + "%", start_month + "%"))
+    total_weekly = c.fetchone()[0] or 0
+
+    conn.close()
+
+    return f"ค่าใช้จ่ายต่อสัปดาห์นี้รวม {total_weekly} บาท"
+
+
+def sum_expenses_weekly():
+    conn = sqlite3.connect(DB)
+    c = conn.cursor()
+
+    current_date = datetime.now()
+    start_date = current_date - datetime.timedelta(days=7)
+
+    month = current_date.strftime("%Y-%m")
+    start_month = start_date.strftime("%Y-%m")
+
+    c.execute("SELECT SUM(amount) FROM expenses WHERE date BETWEEN ? AND ?", (start_month + "%", month + "%"))
+    total_weekly = c.fetchone()[0] or 0
+
+    conn.close()
+
+    return f"ค่าใช้จ่ายต่อสัปดาห์นี้รวม {total_weekly} บาท"
+
+
+def sum_expenses_weekly():
+    conn = sqlite3.connect(DB)
+    c = conn.cursor()
+
+    current_month = datetime.now().strftime("%Y-%m")
+    previous_month = (datetime.now() - datetime.timedelta(days=7)).strftime("%Y-%m")
+
+    c.execute("SELECT SUM(CASE WHEN DATE BETWEEN ? AND ? THEN amount ELSE 0 END) FROM expenses", (previous_month, current_month))
+
+    total_weekly = c.fetchone()[0] or 0
+
+    conn.close()
+
+    return f"ค่าใช้จ่ายต่อสัปดาห์นี้รวม {total_weekly} บาท"

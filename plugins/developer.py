@@ -144,3 +144,7 @@ def execute(text=None):
     return None
 
 
+
+
+def summarize_weekly():
+    pass
