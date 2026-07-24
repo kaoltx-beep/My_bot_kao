@@ -1,15 +1,26 @@
-from .dev_agent import analyze
-from .dev_patcher import apply_plan
+from . import dev_agent
+from . import dev_patcher
+from . import dev_logger
+from . import dev_git
+from . import dev_sessions
+from . import dev_router
 
 
-def create_developer_mode():
-    class DeveloperMode:
-        def __init__(self):
-            self.analyze = analyze
-            self.apply_plan = apply_plan
+class DeveloperMode:
+    def __init__(self, allowed_dirs=None):
+        self.router = dev_router
+        self.agent = dev_agent
+        self.patcher = dev_patcher
+        self.git = dev_git
+        self.sessions = dev_sessions
+        self.logger = dev_logger
 
-    return DeveloperMode()
+
+def create_developer_mode(allowed_dirs=None):
+    return DeveloperMode(allowed_dirs)
 
 
-def test_developer():
-    return True
+__all__ = [
+    "create_developer_mode",
+    "DeveloperMode",
+]
