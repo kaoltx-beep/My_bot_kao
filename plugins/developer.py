@@ -53,7 +53,14 @@ METADATA = {
 # ============================================================
 def _run(cmd):
     try:
-        r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
+        r = subprocess.run(
+            cmd,
+            shell=True,
+            cwd=_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
         return r.stdout[-3000:] or r.stderr[-3000:]
     except Exception as e:
         return str(e)
