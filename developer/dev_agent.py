@@ -116,10 +116,9 @@ def analyze(user_request):
         # ตรวจ PROTECTED — ห้ามแก้ไฟล์สำคัญ
         protected_files = {"run.py", "config.py", ".env", "plugin_loader.py", "plugin_router.py", "__init__.py"}
         if target.startswith("plugins/"):
-                    pass
-                elif any(p in target for p in protected_files):
+            pass
+        elif any(p in target for p in protected_files):
             return {"error": f"❌ ไม่อนุญาตให้แก้ไข {target} (protected file)"}
-
         existing = _read_snippet(target) if os.path.exists(
             os.path.join(PROJECT_ROOT, target)) else "(ไฟล์ใหม่)"
 
