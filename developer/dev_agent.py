@@ -88,9 +88,9 @@ def analyze(user_request):
             messages=[
                 {"role": "system", "content": (
                     "ตอบ JSON บรรทัดเดียว ห้ามพูดเพิ่ม\n"
-                    'format: {"target_file":"path","action":"add_function","function_name":"name","description":"text"}\n'
+                    'format: {"target_file":"path","action":"create_file or add_function","function_name":"name","description":"text"}\n'
                     "ไฟล์ที่ห้ามเลือก: run.py, config.py, __init__.py, dev_router.py, dev_agent.py, dev_patcher.py, plugin_loader.py, plugin_router.py\n"
-                    "ถ้าคำสั่งเป็นการสร้าง plugin ใหม่ ให้ target_file เป็น plugins/ชื่อไฟล์.py เท่านั้น\n"
+                    "ถ้าคำสั่งเป็นการสร้าง plugin ใหม่ ให้ action=create_file และ target_file เป็น plugins/ชื่อไฟล์.py เท่านั้น\n"
                     "ห้ามแก้ไฟล์ protected เช่น run.py config.py dev_agent.py"
                 )},
                 {"role": "user", "content": (
