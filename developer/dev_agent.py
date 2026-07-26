@@ -84,7 +84,7 @@ def analyze(user_request):
         # ── Call 1: แผนงาน (JSON เล็ก ไม่มีโค้ด) ────────────────────────
         r1 = client.chat.completions.create(
             model=MODEL,
-            max_tokens=150,
+            max_tokens=300,
             messages=[
                 {"role": "system", "content": (
                     "ตอบ JSON บรรทัดเดียว ห้ามพูดเพิ่ม\n"
