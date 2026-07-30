@@ -14,6 +14,7 @@ from job_database import list_jobs, search_jobs, pending_jobs
 from expense_manager import monthly_summary
 import plugin_router
 import intent_router
+import developer_mode_router
 plugin_loader.load_plugins()
 import personality
 import smart_router  # noqa: F401 – stub kept for compat
@@ -119,8 +120,8 @@ def ask_jarvis(user_message, history_text=""):
     พูดสุภาพ ลงท้ายครับ
     ตอบสั้น กระชับ เข้าใจง่าย
     ถ้าเป็นความรู้ทั่วไป ให้ตอบจากความรู้ที่มีได้
-ถ้าไม่แน่ใจ ให้บอกว่าไม่แน่ใจ
-ห้ามสร้างตัวเลข ข้อมูลระบบ หรือผลการตรวจสอบที่ไม่มีจริง
+    ถ้าไม่แน่ใจ ให้บอกว่าไม่แน่ใจ
+    ห้ามสร้างตัวเลข ข้อมูลระบบ หรือผลการตรวจสอบที่ไม่มีจริง
     ถ้าไม่เข้าใจคำถาม ให้ถามกลับ
     """
 #     system_instruction += personality.get_prompt()
@@ -155,6 +156,27 @@ User:
     except Exception as e:
         print("AI Error:", e)
         return {"reply":"ขออภัยครับ ระบบ AI ขัดข้องครับ","action":None}
+
+
+def _format_developer_result(result):
+    """Convert Developer Mode analysis into a compact Telegram-safe reply."""
+    files = result.get("files") or []
+    if not files:
+        return "🛠 Developer Mode\nไม่พบไฟล์ที่ตรงกับคำสั่งครับ"
+
+    lines = ["🛠 Developer Mode", f"ตรวจพบ {len(files)} ไฟล์:"]
+    for item in files[:20]:
+        status = "✅" if item.get("status") == "ok" else "❌"
+        path = item.get("file", "unknown")
+        if item.get("status") == "ok":
+            lines.append(f"{status} {path} ({item.get('lines', 0)} บรรทัด)")
+        else:
+            errors = "; ".join(item.get("errors", []))[:180]
+            lines.append(f"{status} {path}: {errors}")
+
+    if len(files) > 20:
+        lines.append(f"… และอีก {len(files) - 20} ไฟล์")
+    return "\n".join(lines)
 
 
 def apply_personality_to_action(action_result, history_text=""):
@@ -200,6 +222,9 @@ def worker():
             elif "กลับโหมดปกติ" in text or "โหมดปกติ" in text:
                 personality.set_mode("NORMAL")
                 reply = "กลับโหมดปกติแล้วครับ"
+            elif developer_mode_router.is_developer_command(text):
+                developer_result = developer_mode_router.execute_developer_command(text)
+                reply = _format_developer_result(developer_result)
             else:
                 result = ask_jarvis(text, history_text)
                 action = intent_router.classify(text) or fallback_intent(text) or result.get("action")
@@ -211,33 +236,31 @@ def worker():
                 elif auto_saved is True:
                     reply = "บันทึกงานติดตั้งไฟเบอร์เสร็จแล้วครับ"
                 else:
-                  if action == "list_jobs":
-                      reply = list_jobs()
+                    if action == "list_jobs":
+                        reply = list_jobs()
 
-                  elif action == "search_jobs":
-                      area = text.replace("งานที่", "").strip()
-                      reply = search_jobs(area)
+                    elif action == "search_jobs":
+                        area = text.replace("งานที่", "").strip()
+                        reply = search_jobs(area)
 
-                  elif action == "pending_jobs":
-                      reply = pending_jobs()
+                    elif action == "pending_jobs":
+                        reply = pending_jobs()
 
-                  else:
-                      reply = result.get("reply") or "รับทราบครับ"
+                    else:
+                        reply = result.get("reply") or "รับทราบครับ"
 
-                plugin_name = None if auto_saved else PLUGIN_MAP.get(action)
+                    plugin_name = None if auto_saved else PLUGIN_MAP.get(action)
 
-                if plugin_name:
-                    plugin = plugin_loader.get_plugin(plugin_name)
+                    if plugin_name:
+                        plugin = plugin_loader.get_plugin(plugin_name)
+                        if plugin:
+                            action_result = plugin.execute(text)
+                            if plugin_name == "news":
+                                reply = action_result
+                            else:
+                                reply = action_result
 
-                    if plugin:
-                        action_result = plugin.execute(text)
-
-                        if plugin_name == "news":
-                            reply = action_result
-                        else:
-                            reply = action_result
-
-                reply = reply.replace("ค่ะ","ครับ").replace("คะ","ครับ")
+                    reply = reply.replace("ค่ะ","ครับ").replace("คะ","ครับ")
 
             print("DEBUG CHAT:", chat_id)
             print("DEBUG REPLY:", reply)
@@ -282,7 +305,7 @@ def handle_start(m):
     if config.TELEGRAM_CHAT_ID and m.chat.id != config.TELEGRAM_CHAT_ID:
         logger.warning("Blocked message from unauthorized chat_id=%s", m.chat.id)
         return
-    
+
     welcome_message = "สวัสดีครับ! ผมคือ Jarvis ผู้ช่วย AI ของคุณ\n\nเลือกเมนูด้านล่างครับ"
     bot.send_message(m.chat.id, welcome_message, reply_markup=get_main_keyboard())
 
@@ -329,15 +352,16 @@ def voice_worker():
             time.sleep(3)
 
 
-
 def send_reminder_message(message):
     try:
         bot.send_message(config.TELEGRAM_CHAT_ID, message)
     except Exception as e:
         print("Reminder Send Error:", e)
 
+
 app = FastAPI()
 app.mount("/dashboard", StaticFiles(directory="dashboard", html=True), name="dashboard")
+
 
 @app.get("/pulse", dependencies=[Depends(_check_dashboard_auth)])
 def pulse():
@@ -365,8 +389,6 @@ def status():
     }
 
 
-
-
 @app.post("/webhook/feedback")
 def webhook_feedback(data: dict):
     print("MacroDroid Feedback:", data)
@@ -377,6 +399,6 @@ if __name__ == "__main__":
     threading.Thread(target=worker, daemon=True).start()
     threading.Thread(target=reminder_worker.worker, args=(send_reminder_message,), daemon=True).start()
     threading.Thread(target=bot.infinity_polling, daemon=True).start()
-  # threading.Thread(target=voice_worker, daemon=True).start()
+    # threading.Thread(target=voice_worker, daemon=True).start()
     print("Jarvis started")
     uvicorn.run(app, host="127.0.0.1", port=8000)
