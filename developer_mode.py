@@ -1,8 +1,4 @@
-"""Safe Developer Mode workflow for Jarvis.
-
-Flow: analyze -> propose -> approve -> backup/apply -> syntax test -> commit.
-A failed test automatically restores the backup. Only project files are allowed.
-"""
+"""Safe Developer Mode workflow for Jarvis."""
 from __future__ import annotations
 
 import ast
@@ -48,7 +44,7 @@ def _safe_path(filename: str) -> Path:
     if path != root and root not in path.parents:
         raise ValueError("ไฟล์อยู่นอก project ไม่อนุญาต")
     rel = path.relative_to(root).as_posix()
-    if rel in PROTECTED or any(rel == p or rel.startswith(p + "/") for p in PROTECTED if p in {".git"}):
+    if rel in PROTECTED or any(rel == p or rel.startswith(p + "/") for p in PROTECTED if p == ".git"):
         raise ValueError("ไฟล์นี้ถูกป้องกัน ไม่อนุญาตให้ Developer Mode แก้")
     if path.suffix.lower() not in ALLOWED_EXTENSIONS:
         raise ValueError(f"ไม่รองรับไฟล์ประเภท {path.suffix}")
@@ -99,25 +95,14 @@ def _apply_operations(original: str, operations: list[dict[str, Any]]) -> str:
 
 
 def _request_patch(groq_client, prompt: str) -> dict[str, Any]:
-    """Use strict Structured Outputs for reliable patch JSON."""
+    """Use a minimal strict schema and low reasoning effort for patch generation."""
     schema = {
         "type": "object",
         "properties": {
-            "operations": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "old_text": {"type": "string"},
-                        "new_text": {"type": "string"},
-                    },
-                    "required": ["old_text", "new_text"],
-                    "additionalProperties": False,
-                },
-            },
-            "summary": {"type": "string"},
+            "old_text": {"type": "string"},
+            "new_text": {"type": "string"},
         },
-        "required": ["operations", "summary"],
+        "required": ["old_text", "new_text"],
         "additionalProperties": False,
     }
     res = groq_client.chat.completions.create(
@@ -125,14 +110,20 @@ def _request_patch(groq_client, prompt: str) -> dict[str, Any]:
         response_format={
             "type": "json_schema",
             "json_schema": {
-                "name": "developer_patch",
+                "name": "single_patch",
                 "strict": True,
                 "schema": schema,
             },
         },
-        messages=[{"role": "user", "content": prompt}],
+        messages=[
+            {
+                "role": "user",
+                "content": prompt + "\nReturn exactly one JSON object with old_text and new_text."
+            }
+        ],
+        reasoning_effort="low",
         temperature=0.0,
-        max_tokens=1800,
+        max_tokens=1200,
     )
     return json.loads(res.choices[0].message.content)
 
@@ -152,10 +143,9 @@ def prepare_patch(text: str, groq_client=None) -> dict[str, Any]:
         return {"ok": False, "error": f"ไฟล์ใหญ่เกิน {MAX_FILE_CHARS} ตัวอักษรสำหรับ patch อัตโนมัติ"}
 
     prompt = f"""คุณเป็น Senior Python Developer ของ Jarvis.
-ตอบตาม JSON schema ที่ระบบกำหนดเท่านั้น
-สร้าง operations สำหรับแก้ไฟล์ตามคำสั่ง
-old_text ต้องมีอยู่จริงในไฟล์และพบเพียง 1 ครั้ง
-ห้ามส่งไฟล์ทั้งไฟล์ และห้ามแก้ไฟล์อื่น
+แก้ไฟล์ตามคำสั่งด้วยการแทนที่ข้อความเดิมเพียง 1 จุด
+ต้องส่ง old_text เป็นข้อความที่มีอยู่จริงในไฟล์ และ new_text เป็นข้อความใหม่
+ห้ามส่งไฟล์ทั้งไฟล์
 
 ไฟล์: {filename}
 คำสั่ง: {text}
@@ -166,11 +156,9 @@ old_text ต้องมีอยู่จริงในไฟล์และ�
 ---"""
     try:
         data = _request_patch(groq_client, prompt)
-        operations = data.get("operations", [])
-        if not isinstance(operations, list) or not operations:
-            return {"ok": False, "error": "AI ไม่ได้สร้าง patch operations"}
-        new_content = _apply_operations(original, operations)
-        summary = str(data.get("summary", "แก้ไขตามคำสั่ง"))
+        old_text = data.get("old_text", "")
+        new_text = data.get("new_text", "")
+        new_content = _apply_operations(original, [{"old_text": old_text, "new_text": new_text}])
     except Exception as exc:
         return {"ok": False, "error": f"สร้าง patch ไม่สำเร็จ: {exc}"}
 
@@ -192,15 +180,15 @@ old_text ต้องมีอยู่จริงในไฟล์และ�
         "status": "pending",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "file": filename,
-        "summary": summary,
+        "summary": f"แก้ไข {filename} ตามคำสั่ง",
         "original": original,
         "new_content": new_content,
         "diff": diff,
-        "operations": operations,
+        "operations": [{"old_text": old_text, "new_text": new_text}],
         "model": DEV_MODEL,
     }
     _save_session(session)
-    return {"ok": True, "proposal_id": proposal_id, "file": filename, "summary": summary, "diff": diff}
+    return {"ok": True, "proposal_id": proposal_id, "file": filename, "summary": session["summary"], "diff": diff}
 
 
 def approve(proposal_id: str) -> dict[str, Any]:
@@ -218,15 +206,8 @@ def approve(proposal_id: str) -> dict[str, Any]:
         session["backup"] = str(backup.relative_to(PROJECT_ROOT))
         session["status"] = "applied"
         _save_session(session)
-
         if path.suffix == ".py":
-            proc = subprocess.run(
-                [os.fspath(os.sys.executable), "-m", "py_compile", str(path)],
-                cwd=PROJECT_ROOT,
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
+            proc = subprocess.run([os.fspath(os.sys.executable), "-m", "py_compile", str(path)], cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=30)
             if proc.returncode != 0:
                 shutil.copy2(backup, path)
                 backup.unlink(missing_ok=True)
@@ -234,26 +215,17 @@ def approve(proposal_id: str) -> dict[str, Any]:
                 session["test"] = proc.stderr[-1500:] or proc.stdout[-1500:]
                 _save_session(session)
                 return {"ok": False, "status": "rolled_back", "error": "ทดสอบ syntax ไม่ผ่าน จึง rollback แล้ว", "test": session["test"]}
-
-        proc = subprocess.run(["git", "status", "--short", "--", session["file"]], cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=30)
-        if proc.returncode != 0:
-            raise RuntimeError(proc.stderr.strip() or "git status failed")
+        if subprocess.run(["git", "status", "--short", "--", session["file"]], cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=30).returncode != 0:
+            raise RuntimeError("git status failed")
         add = subprocess.run(["git", "add", "--", session["file"]], cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=30)
         if add.returncode != 0:
             raise RuntimeError(add.stderr.strip() or "git add failed")
-        commit = subprocess.run(
-            ["git", "commit", "-m", f"Jarvis Developer Mode: update {session['file']}"],
-            cwd=PROJECT_ROOT,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
+        commit = subprocess.run(["git", "commit", "-m", f"Jarvis Developer Mode: update {session['file']}"], cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=30)
         if commit.returncode != 0:
             session["status"] = "tested_uncommitted"
             session["commit_error"] = commit.stderr.strip() or commit.stdout.strip()
             _save_session(session)
             return {"ok": False, "status": "tested_uncommitted", "error": "แก้ไขและทดสอบผ่านแล้ว แต่ commit ไม่สำเร็จ", "details": session["commit_error"]}
-
         backup.unlink(missing_ok=True)
         session["status"] = "committed"
         session["commit"] = commit.stdout.strip() or "committed"
@@ -281,7 +253,6 @@ def reject(proposal_id: str) -> dict[str, Any]:
 
 
 def self_test_rollback() -> dict[str, Any]:
-    """Verify Apply -> test failure -> rollback using an isolated temporary project file."""
     target = PROJECT_ROOT / "tests" / "_developer_auto_rollback_test.py"
     backup = target.with_name(target.name + ".backup_test")
     original = "print('rollback-original')\n"
@@ -291,18 +262,11 @@ def self_test_rollback() -> dict[str, Any]:
         target.write_text(original, encoding="utf-8")
         shutil.copy2(target, backup)
         target.write_text(broken, encoding="utf-8")
-        proc = subprocess.run(
-            [os.fspath(os.sys.executable), "-m", "py_compile", str(target)],
-            cwd=PROJECT_ROOT,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
+        proc = subprocess.run([os.fspath(os.sys.executable), "-m", "py_compile", str(target)], cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=30)
         if proc.returncode == 0:
             return {"ok": False, "status": "failed", "error": "ทดสอบ rollback ไม่ล้มเหลวตามที่คาด"}
         shutil.copy2(backup, target)
-        restored = target.read_text(encoding="utf-8") == original
-        if not restored:
+        if target.read_text(encoding="utf-8") != original:
             return {"ok": False, "status": "failed", "error": "rollback คืนเนื้อหาไม่ตรงของเดิม"}
         return {"ok": True, "status": "rolled_back", "message": "Apply → Test fail → Rollback ผ่าน"}
     except Exception as exc:
@@ -317,24 +281,13 @@ def self_test_rollback() -> dict[str, Any]:
 
 
 def system_status() -> dict[str, Any]:
-    """Return a compact local health report for Developer Mode."""
     session = _load_session()
     try:
         git = subprocess.run(["git", "branch", "--show-current"], cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=10)
         branch = git.stdout.strip() or "unknown"
     except Exception:
         branch = "unknown"
-    return {
-        "ok": True,
-        "status": "online",
-        "project": PROJECT_ROOT.name,
-        "branch": branch,
-        "developer_mode": "ready",
-        "model": DEV_MODEL,
-        "max_file_chars": MAX_FILE_CHARS,
-        "pending_proposal": session.get("id") if session.get("status") == "pending" else None,
-        "protected_files": sorted(PROTECTED),
-    }
+    return {"ok": True, "status": "online", "project": PROJECT_ROOT.name, "branch": branch, "developer_mode": "ready", "model": DEV_MODEL, "max_file_chars": MAX_FILE_CHARS, "pending_proposal": session.get("id") if session.get("status") == "pending" else None, "protected_files": sorted(PROTECTED)}
 
 
 def handle(text: str, groq_client=None) -> dict[str, Any]:
