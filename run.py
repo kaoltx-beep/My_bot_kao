@@ -19,6 +19,8 @@ plugin_loader.load_plugins()
 import personality
 import smart_router  # noqa: F401 – stub kept for compat
 import auto_work
+from core.tool_system import JarvisToolSystem
+from core.approval import create as create_approval, consume as consume_approval
 
 PLUGIN_MAP = {
     "check_battery": "battery",
@@ -57,7 +59,57 @@ bot = telebot.TeleBot(config.TELEGRAM_TOKEN)
 client = Groq(api_key=config.GROQ_API_KEY)
 
 task_queue = Queue()
+tool_system = JarvisToolSystem()
 
+
+
+
+
+
+def _try_tool_system(text, chat_id=None):
+    """V1 approval-aware bridge. Low-risk tools execute; high-risk tools pause for approval."""
+    try:
+        call = tool_system.parse(text)
+        if call is None:
+            return None
+
+        tool = tool_system.registry.get(call.tool_name)
+        if tool is None:
+            return None
+
+        if tool.metadata.risk_level in {"high", "critical"}:
+            if chat_id is None:
+                return None
+            approval_id = create_approval(call.tool_name, call.params, int(chat_id))
+            markup = telebot.types.InlineKeyboardMarkup(row_width=2)
+            markup.add(
+                telebot.types.InlineKeyboardButton("✅ อนุมัติ", callback_data=f"tool_approval:approve:{approval_id}"),
+                telebot.types.InlineKeyboardButton("❌ ยกเลิก", callback_data=f"tool_approval:reject:{approval_id}"),
+            )
+            return {
+                "handled": True,
+                "reply": f"🛡 ต้องอนุมัติก่อน\nTool: {call.tool_name}\nคำขอ: {call.params}\nรหัส: {approval_id}",
+                "markup": markup,
+            }
+
+        if tool.metadata.risk_level not in {"low", "medium"}:
+            return None
+
+        result = tool_system.execute(call.tool_name, call.params)
+        if not result.success:
+            return {"handled": True, "reply": f"🛠 Tool {call.tool_name} ไม่สำเร็จ: {result.error}", "markup": None}
+
+        data = result.data
+        if isinstance(data, list):
+            data = "\n".join(" | ".join(map(str, row)) if isinstance(row, (list, tuple)) else str(row) for row in data)
+        data = str(data)
+        max_chars = 3500
+        if len(data) > max_chars:
+            data = data[:max_chars] + "\n… [ตัดข้อความเพื่อป้องกัน Telegram message too long]"
+        return {"handled": True, "reply": f"🧰 {call.tool_name}\n{data}", "markup": None}
+    except Exception as exc:
+        print("Tool System Error:", exc)
+        return None
 
 def _send_admin_alert(error_text: str):
     """Send a crash/error notification to the admin chat."""
@@ -226,7 +278,17 @@ def worker():
                 developer_result = developer_mode_router.execute_developer_command(text)
                 reply = _format_developer_result(developer_result)
             else:
-                result = ask_jarvis(text, history_text)
+                tool_system_result = _try_tool_system(text, chat_id)
+                if tool_system_result is not None and tool_system_result.get("handled"):
+                    tool_system_reply = tool_system_result["reply"]
+                    tool_system_markup = tool_system_result.get("markup")
+                    reply = tool_system_reply
+                    auto_saved = "tool_system"
+                    result = {"reply": tool_system_reply, "action": None}
+                else:
+                    tool_system_reply = None
+                    tool_system_markup = None
+                    result = ask_jarvis(text, history_text)
                 action = intent_router.classify(text) or fallback_intent(text) or result.get("action")
 
                 if isinstance(action, dict):
@@ -236,7 +298,9 @@ def worker():
                 if not isinstance(action, str):
                     action = None
 
-                if auto_saved == "duplicate":
+                if auto_saved == "tool_system":
+                    reply = tool_system_reply
+                elif auto_saved == "duplicate":
                     reply = "งานนี้ผมบันทึกไว้แล้วครับ"
                 elif auto_saved is True:
                     reply = "บันทึกงานติดตั้งไฟเบอร์เสร็จแล้วครับ"
@@ -271,7 +335,10 @@ def worker():
             print("DEBUG REPLY:", reply)
 
             if chat_id:
-                bot.send_message(chat_id, reply, reply_markup=get_main_keyboard())
+                if auto_saved == "tool_system" and 'tool_system_markup' in locals() and tool_system_markup is not None:
+                    bot.send_message(chat_id, reply, reply_markup=tool_system_markup)
+                else:
+                    bot.send_message(chat_id, reply, reply_markup=get_main_keyboard())
             try:
                 tts.speak(reply)
             except Exception as e:
@@ -314,6 +381,45 @@ def handle_start(m):
     welcome_message = "สวัสดีครับ! ผมคือ Jarvis ผู้ช่วย AI ของคุณ\n\nเลือกเมนูด้านล่างครับ"
     bot.send_message(m.chat.id, welcome_message, reply_markup=get_main_keyboard())
 
+
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("tool_approval:"))
+def handle_tool_approval(call):
+    if config.TELEGRAM_CHAT_ID and call.message and call.message.chat.id != config.TELEGRAM_CHAT_ID:
+        bot.answer_callback_query(call.id, "ไม่ได้รับอนุญาต")
+        return
+
+    parts = call.data.split(":", 2)
+    if len(parts) != 3:
+        bot.answer_callback_query(call.id, "ข้อมูลอนุมัติไม่ถูกต้อง")
+        return
+
+    action, approval_id = parts[1], parts[2]
+    status = "approved" if action == "approve" else "rejected" if action == "reject" else None
+    if status is None:
+        bot.answer_callback_query(call.id, "คำสั่งไม่ถูกต้อง")
+        return
+
+    item = consume_approval(approval_id, status)
+    if item is None:
+        bot.answer_callback_query(call.id, "คำขอนี้ถูกใช้ไปแล้วหรือหมดอายุ")
+        return
+
+    if status == "rejected":
+        bot.answer_callback_query(call.id, "ยกเลิกแล้ว")
+        bot.edit_message_text("❌ ยกเลิก Tool: " + item["tool"], call.message.chat.id, call.message.message_id)
+        return
+
+    result = tool_system.execute(item["tool"], item["params"], approved=True)
+    bot.answer_callback_query(call.id, "อนุมัติแล้ว")
+    if result.success:
+        data = str(result.data)
+        if len(data) > 3500:
+            data = data[:3500] + "\n… [ตัดข้อความ]"
+        bot.edit_message_text(f"✅ อนุมัติและทำงานแล้ว\n🧰 {item['tool']}\n{data}", call.message.chat.id, call.message.message_id)
+    else:
+        bot.edit_message_text(f"❌ Tool ทำงานไม่สำเร็จ\n🧰 {item['tool']}\n{result.error}", call.message.chat.id, call.message.message_id)
 
 @bot.message_handler(func=lambda m: True)
 def handle(m):
