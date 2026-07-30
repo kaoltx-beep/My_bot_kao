@@ -1,11 +1,15 @@
+import tempfile
 import unittest
+from pathlib import Path
 
 from core.default_registry import build_default_registry
 from core.params import parse_tool_params
 from core.registry import ToolRegistry
 from core.router import DeterministicRouter
 from core.safety import evaluate
+from core.task_chain import TaskChain
 from tools.base import BaseTool, ToolMetadata
+from tools.file_tool import FileWriteTool
 
 
 class ToolSystemV1Tests(unittest.TestCase):
@@ -46,7 +50,7 @@ class ToolSystemV1Tests(unittest.TestCase):
         expected = {
             "memory_search", "memory_store",
             "expense_add", "expense_list", "expense_monthly",
-            "git_status", "git_commit",
+            "git_status", "git_commit", "git_push",
             "file_read", "file_write",
             "project_scan", "syntax_check", "test_runner",
             "rollback",
@@ -59,6 +63,12 @@ class ToolSystemV1Tests(unittest.TestCase):
         self.assertEqual(call.params["path"], "run.py")
         self.assertGreaterEqual(call.confidence, 0.9)
 
+    def test_parameter_parser_extracts_file_write(self):
+        call = parse_tool_params("file_write", "แก้ไฟล์ tests/test.py: print('ok')")
+        self.assertIsNotNone(call)
+        self.assertEqual(call.params["path"], "tests/test.py")
+        self.assertEqual(call.params["content"], "print('ok')")
+
     def test_parameter_parser_extracts_expense(self):
         call = parse_tool_params("expense_add", "น้ำมัน 500 บาท")
         self.assertIsNotNone(call)
@@ -70,9 +80,31 @@ class ToolSystemV1Tests(unittest.TestCase):
         self.assertIsNotNone(call)
         self.assertEqual(call.params["message"], "เพิ่มระบบ Tool")
 
+    def test_parameter_parser_extracts_git_push(self):
+        call = parse_tool_params("git_push", "git push")
+        self.assertIsNotNone(call)
+        self.assertEqual(call.params, {})
+
     def test_parameter_parser_rejects_missing_required_value(self):
         self.assertIsNone(parse_tool_params("file_read", "อ่านไฟล์"))
+        self.assertIsNone(parse_tool_params("file_write", "แก้ไฟล์ run.py"))
         self.assertIsNone(parse_tool_params("memory_store", "จำไว้"))
+
+    def test_file_write_metadata_requires_approval(self):
+        self.assertEqual(FileWriteTool.metadata.risk_level, "high")
+        self.assertTrue(FileWriteTool.metadata.require_approval)
+        self.assertTrue(FileWriteTool.metadata.can_rollback)
+
+    def test_task_chain_is_bounded_and_persistent(self):
+        chain = TaskChain(max_steps=2)
+        events = []
+        result = chain.run(
+            "test chain",
+            [("one", lambda: events.append("one")), ("two", lambda: events.append("two")), ("three", lambda: events.append("three"))],
+        )
+        self.assertEqual(events, ["one", "two"])
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(result["step"], 2)
 
     def test_duplicate_registration_is_rejected(self):
         with self.assertRaises(ValueError):
