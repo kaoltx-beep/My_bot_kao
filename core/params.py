@@ -48,11 +48,7 @@ def parse_tool_params(tool_name: str, text: str) -> ParsedToolCall | None:
             content = match.group(2).strip()
             if not content:
                 return None
-            return ParsedToolCall(
-                tool_name,
-                {"path": _clean_path(match.group(1)), "content": content},
-                0.92,
-            )
+            return ParsedToolCall(tool_name, {"path": _clean_path(match.group(1)), "content": content}, 0.92)
         return None
 
     if tool_name == "project_scan":
@@ -78,7 +74,7 @@ def parse_tool_params(tool_name: str, text: str) -> ParsedToolCall | None:
             return ParsedToolCall(tool_name, {"item": match.group(1).strip(), "amount": float(match.group(2))}, 0.95)
         return None
 
-    if tool_name == "expense_list" or tool_name == "expense_monthly" or tool_name == "git_status":
+    if tool_name in {"expense_list", "expense_monthly", "git_status", "git_push"}:
         return ParsedToolCall(tool_name, {}, 0.95)
 
     if tool_name == "git_commit":
