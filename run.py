@@ -165,15 +165,7 @@ def fallback_intent(text):
 
 def ask_jarvis(user_message, history_text=""):
     history_text = history_text[-3000:]
-    system_instruction = """
-คุณคือ Jarvis ผู้ช่วย AI ส่วนตัว
-ตอบภาษาไทยเท่านั้น
-พูดสุภาพ ลงท้ายครับ
-ตอบสั้น กระชับ เข้าใจง่าย
-ถ้าไม่แน่ใจ ให้บอกว่าไม่แน่ใจ
-ห้ามสร้างตัวเลข ข้อมูลระบบ หรือผลการตรวจสอบที่ไม่มีจริง
-ตอบเฉพาะ JSON
-"""
+    system_instruction = personality.get_prompt() + "\n\n" + "ตอบเฉพาะ JSON เท่านั้น\n"
     prompt = f"""Context:\n{history_text}\n\nUser:\n{user_message}\n\nตอบ JSON:\n{{\n  \"reply\":\"ข้อความตอบกลับ\",\n  \"action\":null\n}}"""
     try:
         res = client.chat.completions.create(
@@ -224,12 +216,16 @@ def worker():
             tool_system_reply = None
             tool_system_markup = None
 
-            if "เปิดโหมดกวน" in text or "โหมดกวน" in text:
+            if "เปิดโหมดกวน" in text or "โหมดกวน" in text or "โหมดกวนตีน" in text:
                 personality.set_mode("ROAST")
-                reply = "เปิดโหมดกวนแล้วครับ 😎"
+                reply = "เปิดโหมดกวนตีนแล้วครับ 😈 คราวนี้ระวังโดนกูแซวเละ"
+                result = {"reply": reply, "action": None}
+                auto_saved = "personality"
             elif "กลับโหมดปกติ" in text or "โหมดปกติ" in text:
                 personality.set_mode("NORMAL")
                 reply = "กลับโหมดปกติแล้วครับ"
+                result = {"reply": reply, "action": None}
+                auto_saved = "personality"
             else:
                 tool_result = _try_tool_system(text, chat_id)
                 if tool_result and tool_result.get("handled"):
@@ -257,6 +253,8 @@ def worker():
                 if auto_saved == "tool_system":
                     reply = tool_system_reply
                 elif auto_saved == "developer_mode":
+                    reply = result.get("reply") or reply
+                elif auto_saved == "personality":
                     reply = result.get("reply") or reply
                 elif auto_saved == "duplicate":
                     reply = "งานนี้ผมบันทึกไว้แล้วครับ"
@@ -406,6 +404,42 @@ def handle_start(message):
     )
 
 
+@bot.message_handler(commands=["roast"])
+def handle_roast(message):
+    if config.TELEGRAM_CHAT_ID and message.chat.id != config.TELEGRAM_CHAT_ID:
+        return
+    personality.set_mode("ROAST")
+    bot.send_message(
+        message.chat.id,
+        "😈 เปิดโหมดกวนตีนแล้วครับ\nจากนี้กูจะกวนและด่าตรงขึ้น แต่ยังช่วยมึงแก้ปัญหาอยู่",
+        reply_markup=get_main_keyboard(),
+    )
+
+
+@bot.message_handler(commands=["normal"])
+def handle_normal(message):
+    if config.TELEGRAM_CHAT_ID and message.chat.id != config.TELEGRAM_CHAT_ID:
+        return
+    personality.set_mode("NORMAL")
+    bot.send_message(
+        message.chat.id,
+        "กลับโหมดปกติแล้วครับ",
+        reply_markup=get_main_keyboard(),
+    )
+
+
+@bot.message_handler(commands=["help"])
+def handle_help(message):
+    if config.TELEGRAM_CHAT_ID and message.chat.id != config.TELEGRAM_CHAT_ID:
+        return
+    tts.stop()
+    bot.send_message(
+        message.chat.id,
+        "🤖 คำสั่งหลัก\n/roast = เปิดโหมดกวนตีน\n/normal = กลับโหมดปกติ\n/start = เปิดเมนู\n/help = ช่วยเหลือ\n\nหรือใช้ปุ่มด้านล่างครับ",
+        reply_markup=get_main_keyboard(),
+    )
+
+
 @bot.message_handler(func=lambda message: True)
 def handle(message):
     if config.TELEGRAM_CHAT_ID and message.chat.id != config.TELEGRAM_CHAT_ID:
@@ -442,6 +476,20 @@ def handle(message):
             "❓ ช่วยเหลือ\nพิมพ์คำสั่งตามปกติได้เลยครับ หรือใช้ปุ่มเมนูด้านล่าง",
             reply_markup=get_main_keyboard(),
         )
+        return
+
+    if text in {"🔥 โหมดกวนตีน", "😈 โหมดกวน"}:
+        personality.set_mode("ROAST")
+        bot.send_message(
+            message.chat.id,
+            "😈 เปิดโหมดกวนตีนแล้วครับ\nเตรียมรับคำด่าแบบขำๆ ได้เลย",
+            reply_markup=get_main_keyboard(),
+        )
+        return
+
+    if text == "🙂 โหมดปกติ":
+        personality.set_mode("NORMAL")
+        bot.send_message(message.chat.id, "กลับโหมดปกติแล้วครับ", reply_markup=get_main_keyboard())
         return
 
     task_queue.put(
