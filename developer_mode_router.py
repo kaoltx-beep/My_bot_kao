@@ -21,6 +21,7 @@ _DEV_KEYWORDS = (
     "ยกเลิก patch",
     "ยกเลิกแพตช์",
     "ดำเนินการ",
+    "ดำเนินการต่อ",
     "สถานะระบบ",
     "/status",
     "ทดสอบ rollback",
@@ -79,7 +80,7 @@ def _result_for_run(result: dict) -> dict:
 
         return {"files": [{"status": "ok", "file": result.get("message", "สำเร็จ"), "lines": 1}]}
 
-    return {"files": [{"status": "error", "file": "Developer Mode", "errors": [result.get("error", "เกิดข้อผิดพลาด")] }]}
+    return {"files": [{"status": "error", "file": "Developer Mode", "errors": [result.get("error", "เกิดข้อผิดพลาด")]}]}
 
 
 def _get_groq_client(groq_client=None):
@@ -95,14 +96,14 @@ def _get_groq_client(groq_client=None):
 def _execute_auto(text: str, groq_client=None):
     """Run Developer Mode end-to-end without a manual approval step."""
     normalized = (text or "").strip()
-    remainder = re.sub(r"^ดำเนินการ\s*", "", normalized, count=1).strip()
+    remainder = re.sub(r"^(?:ดำเนินการต่อ|ดำเนินการ)\s*", "", normalized, count=1).strip()
 
     proposal = developer_mode._load_session()
     if not remainder and proposal.get("id") and proposal.get("status") == "pending":
         return _result_for_run(developer_mode.approve(proposal["id"]))
 
     if not remainder:
-        return _result_for_run({"ok": False, "error": "โหมดอัตโนมัติต้องระบุคำสั่ง เช่น ดำเนินการ แก้ไฟล์ run.py ..."})
+        return _result_for_run({"ok": False, "error": "โหมดอัตโนมัติต้องระบุงาน เช่น ดำเนินการต่อ แก้ไฟล์ run.py ..."})
 
     client = _get_groq_client(groq_client)
     if isinstance(client, Exception):
@@ -141,7 +142,7 @@ def execute_developer_command(text: str, root=".", groq_client=None):
     if "rollback" in normalized or "โรลแบ็ก" in normalized:
         return _result_for_run(developer_mode.self_test_rollback())
 
-    if normalized.startswith("ดำเนินการ"):
+    if normalized.startswith("ดำเนินการต่อ") or normalized.startswith("ดำเนินการ"):
         return _execute_auto(text, groq_client=groq_client)
 
     match = re.search(r"อนุมัติ\s+([a-f0-9]{10})", normalized)
