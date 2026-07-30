@@ -48,9 +48,19 @@ def _result_for_run(result: dict) -> dict:
                 f"หรือ: ยกเลิก patch {proposal_id}"
             )
             return {"files": [{"status": "ok", "file": text, "lines": 0}]}
+
+        if result.get("file"):
+            return {
+                "files": [{
+                    "status": "ok",
+                    "file": result["file"],
+                    "lines": result.get("lines", 0),
+                }]
+            }
+
         return {"files": [{"status": "ok", "file": result.get("message", "สำเร็จ"), "lines": 0}]}
 
-    return {"files": [{"status": "error", "file": "Developer Mode", "errors": [result.get("error", "เกิดข้อผิดพลาด")]}]}
+    return {"files": [{"status": "error", "file": "Developer Mode", "errors": [result.get("error", "เกิดข้อผิดพลาด")] }]}
 
 
 def execute_developer_command(text: str, root=".", groq_client=None):
