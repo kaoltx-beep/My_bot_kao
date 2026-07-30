@@ -20,6 +20,7 @@ from typing import Any
 PROJECT_ROOT = Path(__file__).resolve().parent
 SESSION_FILE = PROJECT_ROOT / "data" / "developer_session.json"
 MAX_FILE_CHARS = 20000
+DEV_MODEL = os.getenv("GROQ_DEV_MODEL", "openai/gpt-oss-20b")
 PROTECTED = {".env", ".git", "config.py", "data/developer_session.json"}
 ALLOWED_EXTENSIONS = {".py", ".txt", ".md", ".json", ".sh", ".cfg", ".ini"}
 
@@ -116,7 +117,7 @@ def prepare_patch(text: str, groq_client=None) -> dict[str, Any]:
 ---"""
     try:
         res = groq_client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model=DEV_MODEL,
             response_format={"type": "json_object"},
             messages=[{"role": "user", "content": prompt}],
             temperature=0.1,
@@ -150,6 +151,7 @@ def prepare_patch(text: str, groq_client=None) -> dict[str, Any]:
         "original": original,
         "new_content": new_content,
         "diff": diff,
+        "model": DEV_MODEL,
     }
     _save_session(session)
     return {"ok": True, "proposal_id": proposal_id, "file": filename, "summary": summary, "diff": diff}
