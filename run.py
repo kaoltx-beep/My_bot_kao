@@ -308,6 +308,7 @@ def get_main_keyboard():
         telebot.types.KeyboardButton("🧠 ความจำ"),
         telebot.types.KeyboardButton("📊 รายงาน"),
         telebot.types.KeyboardButton("🔋 สถานะเครื่อง"),
+        telebot.types.KeyboardButton("⏹ หยุดพูด"),
         telebot.types.KeyboardButton("❓ ช่วยเหลือ"),
     )
     return keyboard
@@ -411,9 +412,20 @@ def handle(message):
         return
     if not message.text:
         return
+
     text = message.text.strip()[:2000]
     if not text:
         return
+
+    if text == "⏹ หยุดพูด":
+        stopped = tts.stop()
+        bot.send_message(
+            message.chat.id,
+            "⏹ หยุดพูดแล้วครับ" if stopped else "⏹ ตอนนี้ไม่มีเสียงที่กำลังพูดครับ",
+            reply_markup=get_main_keyboard(),
+        )
+        return
+
     task_queue.put(
         {
             "chat_id": message.chat.id,
