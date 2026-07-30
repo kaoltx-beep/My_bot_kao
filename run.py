@@ -426,6 +426,24 @@ def handle(message):
         )
         return
 
+    if text == "🤖 Jarvis Menu":
+        tts.stop()
+        bot.send_message(
+            message.chat.id,
+            "🤖 Jarvis Menu\nเลือกคำสั่งจากปุ่มด้านล่างครับ",
+            reply_markup=get_main_keyboard(),
+        )
+        return
+
+    if text == "❓ ช่วยเหลือ":
+        tts.stop()
+        bot.send_message(
+            message.chat.id,
+            "❓ ช่วยเหลือ\nพิมพ์คำสั่งตามปกติได้เลยครับ หรือใช้ปุ่มเมนูด้านล่าง",
+            reply_markup=get_main_keyboard(),
+        )
+        return
+
     task_queue.put(
         {
             "chat_id": message.chat.id,
