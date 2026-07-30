@@ -21,6 +21,7 @@ DEFAULT_KEYWORDS: dict[str, tuple[str, ...]] = {
     "test_runner": ("รัน test", "รันทดสอบ", "pytest", "test runner"),
     "git_status": ("git status", "ดูสถานะ git", "สถานะ git"),
     "git_commit": ("git commit", "commit โค้ด", "บันทึกโค้ด"),
+    "git_push": ("git push", "push โค้ด", "ส่งโค้ดขึ้น github", "อัปโหลดโค้ดขึ้น github"),
     "rollback": ("rollback", "ย้อนกลับ", "ยกเลิกการแก้", "โรลแบ็ก"),
 }
 
