@@ -1,5 +1,6 @@
 import unittest
 
+from core.default_registry import build_default_registry
 from core.registry import ToolRegistry
 from core.router import DeterministicRouter
 from core.safety import evaluate
@@ -37,6 +38,19 @@ class ToolSystemV1Tests(unittest.TestCase):
         self.assertIsNotNone(self.registry.get("file_read"))
         self.assertEqual(len(self.registry.filter(category="file_system")), 2)
         self.assertEqual(len(self.registry.filter(risk_level="high")), 1)
+
+    def test_default_registry_contains_v1_tools(self):
+        registry = build_default_registry()
+        names = {metadata.name for metadata in registry.list()}
+        expected = {
+            "memory_search", "memory_store",
+            "expense_add", "expense_list", "expense_monthly",
+            "git_status", "git_commit",
+            "file_read", "file_write",
+            "project_scan", "syntax_check", "test_runner",
+            "rollback",
+        }
+        self.assertEqual(names, expected)
 
     def test_duplicate_registration_is_rejected(self):
         with self.assertRaises(ValueError):
