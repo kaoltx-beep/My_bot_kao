@@ -28,7 +28,8 @@ def parse_tool_params(tool_name: str, text: str) -> ParsedToolCall | None:
 
     if tool_name in {"file_read", "syntax_check"}:
         patterns = [
-            r"(?:อ่าน|เปิด|ดู|ตรวจ(?:\s+syntax)?|เช็ก(?:\s+syntax)?)\s+(?:ไฟล์\s+)?([\w./-]+\.py)",
+            r"(?:อ่าน|เปิด|ดู)\s*(?:ไฟล์|โค้ด)?\s*([\w./-]+\.py)",
+            r"(?:ตรวจ|เช็ก)\s*(?:syntax\s*)?(?:ไฟล์\s*)?([\w./-]+\.py)",
             r"(?:file|path)\s*[:=]\s*([\w./-]+\.py)",
         ]
         for pattern in patterns:
