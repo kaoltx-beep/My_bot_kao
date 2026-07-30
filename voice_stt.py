@@ -15,7 +15,6 @@ HOME = "/data/data/com.termux/files/home"
 
 def record_audio():
     filename = f"{HOME}/voice_{int(time.time())}.m4a"
-
     subprocess.run([
         "termux-microphone-record",
         "-f", filename,
@@ -31,7 +30,6 @@ def record_audio():
         time.sleep(1)
 
     time.sleep(2)
-
     return filename
 
 
@@ -61,7 +59,6 @@ def convert_audio(filename):
 def speech_to_text(filename):
     try:
         with open(filename, "rb") as audio:
-
             result = client.audio.transcriptions.create(
                 file=("voice.wav", audio, "audio/wav"),
                 model="whisper-large-v3-turbo",
@@ -69,46 +66,39 @@ def speech_to_text(filename):
             )
 
         return result.text.strip()
-
     except Exception as e:
         print("STT Error:", repr(e))
         return None
 
 
 def listen():
-
     m4a = record_audio()
-
     wav = convert_audio(m4a)
-
     if not wav:
         print("❌ แปลงไฟล์เสียงไม่ได้")
         return None
 
-
     print("ไฟล์:", wav)
     print("ขนาด:", os.path.getsize(wav))
 
-
     text = speech_to_text(wav)
-
     if not text:
         return None
-
 
     if len(text.strip()) < 2:
         return None
 
-
     return text
 
 
+# Compatibility API used by run.py / voice worker.
+def listen_and_transcribe():
+    return listen()
+
+
 if __name__ == "__main__":
-
     print("🎤 กำลังฟัง...")
-
     text = listen()
-
     if text:
         print("Voice:", text)
     else:
