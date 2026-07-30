@@ -13,6 +13,7 @@ PROTECTED = {
     "run.py",
     "config.py",
     ".env",
+    "__init__.py",
     "developer_mode_router.py",
     "dev_agent.py",
     "dev_patcher.py",
@@ -110,7 +111,7 @@ def analyze(user_request):
                         '{"target_file":"path","action":"add_function","function_name":"name",'
                         '"description":"text","insert_after":null}\n'
                         "เลือก target_file จากไฟล์ที่มีอยู่ใน list เท่านั้น\n"
-                        "ห้ามเลือก run.py, config.py, .env, developer_mode_router.py, dev_agent.py, dev_patcher.py, dev_session.py, plugin_loader.py, plugin_router.py\n"
+                        "ห้ามเลือก run.py, config.py, .env, __init__.py, developer_mode_router.py, dev_agent.py, dev_patcher.py, dev_session.py, plugin_loader.py, plugin_router.py\n"
                         "ห้ามเสนอการลบไฟล์หรือการเปลี่ยน dependency\n"
                     ),
                 },
