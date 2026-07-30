@@ -98,47 +98,43 @@ def _apply_operations(original: str, operations: list[dict[str, Any]]) -> str:
     return updated
 
 
-def _parse_patch_response(raw: str) -> dict[str, Any]:
-    """Parse strict JSON or JSON embedded in a fenced/plain response."""
-    text = str(raw or "").strip()
-    if not text:
-        raise ValueError("AI ส่งคำตอบว่าง")
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.S)
-        if fenced:
-            return json.loads(fenced.group(1))
-        start = text.find("{")
-        end = text.rfind("}")
-        if start >= 0 and end > start:
-            return json.loads(text[start:end + 1])
-        raise ValueError("AI ไม่ได้ส่ง JSON ที่อ่านได้")
-
-
 def _request_patch(groq_client, prompt: str) -> dict[str, Any]:
-    """Try strict JSON mode first, then retry as plain text JSON."""
-    try:
-        res = groq_client.chat.completions.create(
-            model=DEV_MODEL,
-            response_format={"type": "json_object"},
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.1,
-            max_tokens=1800,
-        )
-        return _parse_patch_response(res.choices[0].message.content)
-    except Exception as first_exc:
-        retry_prompt = prompt + "\n\nIMPORTANT: Return valid JSON only. No markdown."
-        try:
-            res = groq_client.chat.completions.create(
-                model=DEV_MODEL,
-                messages=[{"role": "user", "content": retry_prompt}],
-                temperature=0.0,
-                max_tokens=1800,
-            )
-            return _parse_patch_response(res.choices[0].message.content)
-        except Exception as second_exc:
-            raise RuntimeError(f"JSON request failed: {first_exc}; fallback failed: {second_exc}") from second_exc
+    """Use strict Structured Outputs for reliable patch JSON."""
+    schema = {
+        "type": "object",
+        "properties": {
+            "operations": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "old_text": {"type": "string"},
+                        "new_text": {"type": "string"},
+                    },
+                    "required": ["old_text", "new_text"],
+                    "additionalProperties": False,
+                },
+            },
+            "summary": {"type": "string"},
+        },
+        "required": ["operations", "summary"],
+        "additionalProperties": False,
+    }
+    res = groq_client.chat.completions.create(
+        model=DEV_MODEL,
+        response_format={
+            "type": "json_schema",
+            "json_schema": {
+                "name": "developer_patch",
+                "strict": True,
+                "schema": schema,
+            },
+        },
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.0,
+        max_tokens=1800,
+    )
+    return json.loads(res.choices[0].message.content)
 
 
 def prepare_patch(text: str, groq_client=None) -> dict[str, Any]:
@@ -156,11 +152,10 @@ def prepare_patch(text: str, groq_client=None) -> dict[str, Any]:
         return {"ok": False, "error": f"ไฟล์ใหญ่เกิน {MAX_FILE_CHARS} ตัวอักษรสำหรับ patch อัตโนมัติ"}
 
     prompt = f"""คุณเป็น Senior Python Developer ของ Jarvis.
-ตอบเป็น JSON object เท่านั้น มี 2 ฟิลด์:
-operations: array ของ objects ที่มี old_text และ new_text
-summary: ข้อความสรุปสั้น ๆ
-ห้ามส่งไฟล์ทั้งไฟล์. old_text ต้องมีอยู่จริงในไฟล์และพบเพียง 1 ครั้ง.
-ห้ามแก้ไฟล์อื่น.
+ตอบตาม JSON schema ที่ระบบกำหนดเท่านั้น
+สร้าง operations สำหรับแก้ไฟล์ตามคำสั่ง
+old_text ต้องมีอยู่จริงในไฟล์และพบเพียง 1 ครั้ง
+ห้ามส่งไฟล์ทั้งไฟล์ และห้ามแก้ไฟล์อื่น
 
 ไฟล์: {filename}
 คำสั่ง: {text}
