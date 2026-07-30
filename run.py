@@ -91,7 +91,7 @@ def worker():
     while True:
         task = task_queue.get()
 
-        reply = ""   # 🔥 กันพัง
+        reply = ""   # กันพัง
         action = None
 
         try:
@@ -101,20 +101,20 @@ def worker():
 
             history_text = "\n".join([f"U:{u} B:{b}" for u, b in history])
 
-            import plugin_router
+            # Developer Mode must run BEFORE legacy plugins so that
+            # create/patch/confirm commands use the pending-confirm flow.
+            dev_result = handle_developer_request(text)
+            if dev_result:
+                reply = str(dev_result)
+                bot.send_message(chat_id, reply)
+                continue
 
+            import plugin_router
             plugin_reply = plugin_router.execute_plugin(text)
 
             if plugin_reply:
                 reply = plugin_reply
             else:
-                dev_result = handle_developer_request(text)
-
-                if dev_result:
-                    reply = str(dev_result)
-                    bot.send_message(chat_id, reply)
-                    continue
-
                 result = ask_jarvis(text, history_text)
                 action = result.get("action") or fallback_intent(text)
                 reply = result.get("reply") or "รับทราบ"
@@ -127,13 +127,13 @@ def worker():
 
             bot.send_message(chat_id, reply)
 
-            # 🔊 TTS กันพัง
+            # TTS กันพัง
             try:
                 tts.speak(reply)
             except Exception as e:
                 print("TTS Error:", e)
 
-            # 🧠 memory กันพัง
+            # memory กันพัง
             try:
                 memory_manager.save_memory(text, reply)
             except Exception as e:
@@ -166,6 +166,7 @@ def handle(m):
 # fastapi
 # ------------------
 app = FastAPI()
+
 
 @app.get("/pulse")
 def pulse():
