@@ -20,6 +20,7 @@ _DEV_KEYWORDS = (
     "อนุมัติ",
     "ยกเลิก patch",
     "ยกเลิกแพตช์",
+    "ดำเนินการ",
 )
 
 
@@ -34,6 +35,15 @@ def _result_for_run(result: dict) -> dict:
         return result
 
     if result.get("ok"):
+        status = result.get("status")
+        if status == "committed":
+            file_name = result.get("file") or result.get("details") or "ไฟล์ที่แก้ไข"
+            return {"files": [{"status": "ok", "file": f"✅ แก้ไข → ทดสอบ → commit สำเร็จ\n📝 {file_name}", "lines": 1}]}
+        if status == "rolled_back":
+            return {"files": [{"status": "error", "file": "Developer Mode", "errors": ["แก้ไขไม่ผ่าน จึง rollback กลับเป็นไฟล์เดิมแล้ว"]}]}
+        if status == "tested_uncommitted":
+            return {"files": [{"status": "error", "file": result.get("file", "Developer Mode"), "errors": ["แก้ไขและทดสอบผ่านแล้ว แต่ commit ไม่สำเร็จ"]}]}
+
         proposal_id = result.get("proposal_id")
         if proposal_id:
             diff = result.get("diff", "")
@@ -58,13 +68,59 @@ def _result_for_run(result: dict) -> dict:
                 }]
             }
 
-        return {"files": [{"status": "ok", "file": result.get("message", "สำเร็จ"), "lines": 0}]}
+        return {"files": [{"status": "ok", "file": result.get("message", "สำเร็จ"), "lines": 1}]}
 
-    return {"files": [{"status": "error", "file": "Developer Mode", "errors": [result.get("error", "เกิดข้อผิดพลาด")] }]}
+    return {"files": [{"status": "error", "file": "Developer Mode", "errors": [result.get("error", "เกิดข้อผิดพลาด")]}]}
+
+
+def _get_groq_client(groq_client=None):
+    if groq_client is not None:
+        return groq_client
+    try:
+        from groq import Groq
+        return Groq(api_key=config.GROQ_API_KEY)
+    except Exception as exc:
+        return exc
+
+
+def _execute_auto(text: str, groq_client=None):
+    """Run Developer Mode end-to-end without a manual approval step.
+
+    Supported forms:
+      - 'ดำเนินการ' -> approve the current pending proposal.
+      - 'ดำเนินการ แก้ไฟล์ run.py ...' -> create, test and commit automatically.
+    """
+    normalized = (text or "").strip()
+    remainder = re.sub(r"^ดำเนินการ\s*", "", normalized, count=1).strip()
+
+    proposal = developer_mode._load_session()
+    if not remainder and proposal.get("id") and proposal.get("status") == "pending":
+        return _result_for_run(developer_mode.approve(proposal["id"]))
+
+    if not remainder:
+        return _result_for_run({"ok": False, "error": "โหมดอัตโนมัติต้องระบุคำสั่ง เช่น ดำเนินการ แก้ไฟล์ run.py ..."})
+
+    client = _get_groq_client(groq_client)
+    if isinstance(client, Exception):
+        return _result_for_run({"ok": False, "error": f"เชื่อมต่อ AI ไม่ได้: {client}"})
+
+    proposal_result = developer_mode.handle(remainder, groq_client=client)
+    if not proposal_result.get("ok"):
+        return _result_for_run(proposal_result)
+
+    proposal_id = proposal_result.get("proposal_id")
+    if not proposal_id:
+        return _result_for_run({"ok": False, "error": "AI สร้างผลลัพธ์แล้วแต่ไม่มี proposal id"})
+
+    approved = developer_mode.approve(proposal_id)
+    return _result_for_run(approved)
 
 
 def execute_developer_command(text: str, root=".", groq_client=None):
     normalized = (text or "").lower().strip()
+
+    if normalized.startswith("ดำเนินการ"):
+        return _execute_auto(text, groq_client=groq_client)
 
     match = re.search(r"อนุมัติ\s+([a-f0-9]{10})", normalized)
     if match:
@@ -77,11 +133,8 @@ def execute_developer_command(text: str, root=".", groq_client=None):
     if any(k in normalized for k in _PROJECT_COMMANDS):
         return handle_dev_request(text, root)
 
-    if groq_client is None:
-        try:
-            from groq import Groq
-            groq_client = Groq(api_key=config.GROQ_API_KEY)
-        except Exception as exc:
-            return _result_for_run({"ok": False, "error": f"เชื่อมต่อ AI ไม่ได้: {exc}"})
+    client = _get_groq_client(groq_client)
+    if isinstance(client, Exception):
+        return _result_for_run({"ok": False, "error": f"เชื่อมต่อ AI ไม่ได้: {client}"})
 
-    return _result_for_run(developer_mode.handle(text, groq_client=groq_client))
+    return _result_for_run(developer_mode.handle(text, groq_client=client))
