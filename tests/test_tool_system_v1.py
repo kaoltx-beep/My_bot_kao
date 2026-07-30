@@ -9,9 +9,9 @@ from tools.base import BaseTool, ToolMetadata
 class ToolSystemV1Tests(unittest.TestCase):
     def setUp(self):
         self.registry = ToolRegistry()
-        self.registry.register(BaseTool(lambda: "ok"))
-        self.registry._tools["file_read"] = BaseTool(lambda path: path)
-        self.registry._tools["file_read"].metadata = ToolMetadata(
+
+        read_tool = BaseTool(lambda path: path)
+        read_tool.metadata = ToolMetadata(
             name="file_read",
             version="1.0.0",
             description="Read a file",
@@ -19,8 +19,10 @@ class ToolSystemV1Tests(unittest.TestCase):
             risk_level="low",
             parameters={"required": ["path"]},
         )
-        self.registry._tools["file_write"] = BaseTool(lambda path, content: content)
-        self.registry._tools["file_write"].metadata = ToolMetadata(
+        self.registry.register(read_tool)
+
+        write_tool = BaseTool(lambda path, content: content)
+        write_tool.metadata = ToolMetadata(
             name="file_write",
             version="1.0.0",
             description="Write a file",
@@ -29,6 +31,7 @@ class ToolSystemV1Tests(unittest.TestCase):
             require_approval=True,
             parameters={"required": ["path", "content"]},
         )
+        self.registry.register(write_tool)
 
     def test_registry_get_and_filter(self):
         self.assertIsNotNone(self.registry.get("file_read"))
