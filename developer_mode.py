@@ -202,7 +202,7 @@ def approve(proposal_id: str) -> dict[str, Any]:
                 session["status"] = "rolled_back"
                 session["test"] = proc.stderr[-1500:] or proc.stdout[-1500:]
                 _save_session(session)
-                return {"ok": False, "error": "ทดสอบ syntax ไม่ผ่าน จึง rollback แล้ว", "test": session["test"]}
+                return {"ok": False, "status": "rolled_back", "error": "ทดสอบ syntax ไม่ผ่าน จึง rollback แล้ว", "test": session["test"]}
 
         proc = subprocess.run(["git", "status", "--short", "--", session["file"]], cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=30)
         if proc.returncode != 0:
@@ -222,13 +222,13 @@ def approve(proposal_id: str) -> dict[str, Any]:
             session["status"] = "tested_uncommitted"
             session["commit_error"] = commit.stderr.strip() or commit.stdout.strip()
             _save_session(session)
-            return {"ok": False, "error": "แก้ไขและทดสอบผ่านแล้ว แต่ commit ไม่สำเร็จ", "details": session["commit_error"]}
+            return {"ok": False, "status": "tested_uncommitted", "error": "แก้ไขและทดสอบผ่านแล้ว แต่ commit ไม่สำเร็จ", "details": session["commit_error"]}
 
         backup.unlink(missing_ok=True)
         session["status"] = "committed"
         session["commit"] = commit.stdout.strip() or "committed"
         _save_session(session)
-        return {"ok": True, "status": "committed", "message": "แก้ไข → ทดสอบ → commit สำเร็จ", "details": session["commit"]}
+        return {"ok": True, "status": "committed", "file": session["file"], "message": "แก้ไข → ทดสอบ → commit สำเร็จ", "details": session["commit"]}
     except Exception as exc:
         try:
             if backup.exists():
@@ -238,7 +238,7 @@ def approve(proposal_id: str) -> dict[str, Any]:
             session["status"] = "rolled_back"
             session["error"] = str(exc)
             _save_session(session)
-        return {"ok": False, "error": f"เกิดข้อผิดพลาดและ rollback แล้ว: {exc}"}
+        return {"ok": False, "status": "rolled_back", "error": f"เกิดข้อผิดพลาดและ rollback แล้ว: {exc}"}
 
 
 def reject(proposal_id: str) -> dict[str, Any]:
@@ -247,7 +247,67 @@ def reject(proposal_id: str) -> dict[str, Any]:
         return {"ok": False, "error": "ไม่พบ proposal นี้"}
     session["status"] = "rejected"
     _save_session(session)
-    return {"ok": True, "message": "ยกเลิก patch แล้ว"}
+    return {"ok": True, "status": "rejected", "message": "ยกเลิก patch แล้ว"}
+
+
+def self_test_rollback() -> dict[str, Any]:
+    """Verify Apply -> test failure -> rollback using an isolated temporary project file."""
+    target = PROJECT_ROOT / "tests" / "_developer_auto_rollback_test.py"
+    backup = target.with_name(target.name + ".backup_test")
+    original = "print('rollback-original')\n"
+    broken = "def broken(:\n"
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(original, encoding="utf-8")
+        shutil.copy2(target, backup)
+        target.write_text(broken, encoding="utf-8")
+
+        proc = subprocess.run(
+            [os.fspath(os.sys.executable), "-m", "py_compile", str(target)],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if proc.returncode == 0:
+            return {"ok": False, "status": "failed", "error": "ทดสอบ rollback ไม่ล้มเหลวตามที่คาด"}
+
+        shutil.copy2(backup, target)
+        restored = target.read_text(encoding="utf-8") == original
+        if not restored:
+            return {"ok": False, "status": "failed", "error": "rollback คืนเนื้อหาไม่ตรงของเดิม"}
+        return {"ok": True, "status": "rolled_back", "message": "Apply → Test fail → Rollback ผ่าน"}
+    except Exception as exc:
+        return {"ok": False, "status": "failed", "error": f"rollback self-test ล้มเหลว: {exc}"}
+    finally:
+        target.unlink(missing_ok=True)
+        backup.unlink(missing_ok=True)
+        pycache = target.parent / "__pycache__"
+        if pycache.exists():
+            compiled = list(pycache.glob(target.stem + ".*.pyc"))
+            for item in compiled:
+                item.unlink(missing_ok=True)
+
+
+def system_status() -> dict[str, Any]:
+    """Return a compact local health report for Developer Mode."""
+    session = _load_session()
+    try:
+        git = subprocess.run(["git", "branch", "--show-current"], cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=10)
+        branch = git.stdout.strip() or "unknown"
+    except Exception:
+        branch = "unknown"
+    return {
+        "ok": True,
+        "status": "online",
+        "project": PROJECT_ROOT.name,
+        "branch": branch,
+        "developer_mode": "ready",
+        "model": DEV_MODEL,
+        "max_file_chars": MAX_FILE_CHARS,
+        "pending_proposal": session.get("id") if session.get("status") == "pending" else None,
+        "protected_files": sorted(PROTECTED),
+    }
 
 
 def handle(text: str, groq_client=None) -> dict[str, Any]:
