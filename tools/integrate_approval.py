@@ -19,10 +19,10 @@ HELPER_BLOCK = '''\n\ndef _try_tool_system(text, chat_id=None):\n    """V1 appro
 CALLBACK_BLOCK = '''\n\n@bot.callback_query_handler(func=lambda call: call.data.startswith("tool_approval:"))\ndef handle_tool_approval(call):\n    if config.TELEGRAM_CHAT_ID and call.message and call.message.chat.id != config.TELEGRAM_CHAT_ID:\n        bot.answer_callback_query(call.id, "ไม่ได้รับอนุญาต")\n        return\n\n    parts = call.data.split(":", 2)\n    if len(parts) != 3:\n        bot.answer_callback_query(call.id, "ข้อมูลอนุมัติไม่ถูกต้อง")\n        return\n\n    action, approval_id = parts[1], parts[2]\n    status = "approved" if action == "approve" else "rejected" if action == "reject" else None\n    if status is None:\n        bot.answer_callback_query(call.id, "คำสั่งไม่ถูกต้อง")\n        return\n\n    item = consume_approval(approval_id, status)\n    if item is None:\n        bot.answer_callback_query(call.id, "คำขอนี้ถูกใช้ไปแล้วหรือหมดอายุ")\n        return\n\n    if status == "rejected":\n        bot.answer_callback_query(call.id, "ยกเลิกแล้ว")\n        bot.edit_message_text("❌ ยกเลิก Tool: " + item["tool"], call.message.chat.id, call.message.message_id)\n        return\n\n    result = tool_system.execute(item["tool"], item["params"], approved=True)\n    bot.answer_callback_query(call.id, "อนุมัติแล้ว")\n    if result.success:\n        data = str(result.data)\n        if len(data) > 3500:\n            data = data[:3500] + "\\n… [ตัดข้อความ]"\n        bot.edit_message_text(f"✅ อนุมัติและทำงานแล้ว\\n🧰 {item['tool']}\\n{data}", call.message.chat.id, call.message.message_id)\n    else:\n        bot.edit_message_text(f"❌ Tool ทำงานไม่สำเร็จ\\n🧰 {item['tool']}\\n{result.error}", call.message.chat.id, call.message.message_id)\n'''
 
 OLD_BRANCH = '''            else:\n                tool_system_reply = _try_tool_system(text)\n                if tool_system_reply is not None:\n                    reply = tool_system_reply\n                    auto_saved = "tool_system"\n                    result = {"reply": tool_system_reply, "action": None}\n                else:\n                    result = ask_jarvis(text, history_text)\n'''
-NEW_BRANCH = '''            else:\n                tool_system_result = _try_tool_system(text, chat_id)\n                if tool_system_result is not None and tool_system_result.get("handled"):\n                    reply = tool_system_result["reply"]\n                    tool_system_markup = tool_system_result.get("markup")\n                    auto_saved = "tool_system"\n                    result = {"reply": reply, "action": None}\n                else:\n                    tool_system_markup = None\n                    result = ask_jarvis(text, history_text)\n'''
+NEW_BRANCH = '''            else:\n                tool_system_result = _try_tool_system(text, chat_id)\n                if tool_system_result is not None and tool_system_result.get("handled"):\n                    tool_system_reply = tool_system_result["reply"]\n                    tool_system_markup = tool_system_result.get("markup")\n                    reply = tool_system_reply\n                    auto_saved = "tool_system"\n                    result = {"reply": tool_system_reply, "action": None}\n                else:\n                    tool_system_reply = None\n                    tool_system_markup = None\n                    result = ask_jarvis(text, history_text)\n'''
 
 OLD_SEND = '''            if chat_id:\n                bot.send_message(chat_id, reply, reply_markup=get_main_keyboard())\n'''
-NEW_SEND = '''            if chat_id:\n                if auto_saved == "tool_system" and 'tool_system_markup' in locals() and tool_system_markup is not None:\n                    bot.send_message(chat_id, reply, reply_markup=tool_system_markup)\n                else:\n                    bot.send_message(chat_id, reply, reply_markup=get_main_keyboard())\n'''
+NEW_SEND = '''            if chat_id:\n                if auto_saved == "tool_system" and tool_system_markup is not None:\n                    bot.send_message(chat_id, reply, reply_markup=tool_system_markup)\n                else:\n                    bot.send_message(chat_id, reply, reply_markup=get_main_keyboard())\n'''
 
 
 def integrate() -> None:
@@ -50,12 +50,22 @@ def integrate() -> None:
             raise SystemExit("หา message handler ไม่พบ")
         source = source.replace(needle, CALLBACK_BLOCK + "\n" + needle, 1)
 
-    if BRANCH_MARK not in source:
-        if OLD_BRANCH not in source:
-            raise SystemExit("หา worker Tool branch ไม่พบ")
+    # Always normalize the worker branch to the approval-safe version.
+    if BRANCH_MARK in source:
+        start = source.find("            else:\n                tool_system_result = _try_tool_system(text, chat_id)")
+        if start < 0:
+            raise SystemExit("พบ branch ใหม่แต่รูปแบบไม่ตรง: หยุดเพื่อความปลอดภัย")
+        end = source.find("                    result = ask_jarvis(text, history_text)", start)
+        if end < 0:
+            raise SystemExit("หาจุดจบ worker branch ไม่พบ")
+        end = source.find("\n", end) + 1
+        source = source[:start] + NEW_BRANCH + source[end:]
+    elif OLD_BRANCH in source:
         source = source.replace(OLD_BRANCH, NEW_BRANCH, 1)
+    else:
+        raise SystemExit("หา worker Tool branch ไม่พบ")
 
-    if OLD_SEND in source and "tool_system_markup" not in source[source.find(OLD_SEND)-300:source.find(OLD_SEND)]:
+    if OLD_SEND in source:
         source = source.replace(OLD_SEND, NEW_SEND, 1)
 
     if source == original:
@@ -65,7 +75,7 @@ def integrate() -> None:
     backup = ROOT / f"run.py.approval_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     shutil.copy2(TARGET, backup)
     TARGET.write_text(source, encoding="utf-8")
-    print("✅ Approval flow installed")
+    print("✅ Approval flow updated")
     print(f"🛟 Backup: {backup.name}")
 
 
