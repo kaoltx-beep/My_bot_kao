@@ -52,14 +52,28 @@ def worker(send_message):
 
             for reminder_id, text, remind_time in reminders:
                 message = f"⏰ แจ้งเตือนครับ\n{text}\nเวลา {remind_time}"
-
                 print("Sending:", message)
-
                 send_message(message)
-
                 mark_done(reminder_id)
 
         except Exception as e:
             print("Reminder Worker Error:", e)
 
         time.sleep(30)
+
+
+# Compatibility API used by run.py. Uses the configured Telegram bot when available.
+def run():
+    try:
+        import config
+        import telebot
+        bot = telebot.TeleBot(config.TELEGRAM_TOKEN)
+        chat_id = config.TELEGRAM_CHAT_ID
+
+        def send_message(message):
+            if chat_id:
+                bot.send_message(chat_id, message)
+
+        worker(send_message)
+    except Exception as e:
+        print("Reminder run error:", e)
