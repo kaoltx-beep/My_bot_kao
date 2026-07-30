@@ -78,7 +78,11 @@ def apply_plan(plan):
     except Exception as exc:
         return f"❌ target ไม่ปลอดภัย: {exc}"
 
-    protected = {"run.py", "config.py", ".env", "developer_mode_router.py", "dev_patcher.py", "dev_agent.py", "dev_session.py"}
+    protected = {
+        "run.py", "config.py", ".env", "__init__.py",
+        "developer_mode_router.py", "dev_patcher.py", "dev_agent.py",
+        "dev_session.py", "plugin_loader.py", "plugin_router.py",
+    }
     if rel in protected or os.path.basename(rel) in protected:
         return f"❌ ไม่อนุญาตให้แก้ไฟล์ protected: {rel}"
 
