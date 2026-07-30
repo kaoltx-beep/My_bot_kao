@@ -135,3 +135,5 @@ if __name__ == "__main__":
 # Approval Commit Test
 
 # Git commit approval test
+
+# Git push approval test
