@@ -62,10 +62,6 @@ task_queue = Queue()
 tool_system = JarvisToolSystem()
 
 
-
-
-
-
 def _try_tool_system(text, chat_id=None):
     """V1 approval-aware bridge. Low-risk tools execute; high-risk tools pause for approval."""
     try:
@@ -110,6 +106,7 @@ def _try_tool_system(text, chat_id=None):
     except Exception as exc:
         print("Tool System Error:", exc)
         return None
+
 
 def _send_admin_alert(error_text: str):
     """Send a crash/error notification to the admin chat."""
@@ -256,11 +253,7 @@ def worker():
 
             auto_saved = auto_work.save_auto_work(text)
             history = task["history"]
-            # history from task might overlap with db_memory, but we'll keep it simple for now
-            # and let the character limit in ask_jarvis handle the total size.
             history_text = "\n".join([f"User:{u}\nJarvis:{b}" for u,b in history])
-
-            # Reduce DB memory lookup to 3 instead of 5 to further save context
             db_memory = memory_manager.get_memory(3)
 
             if db_memory:
@@ -268,16 +261,18 @@ def worker():
                     [f"User:{u}\nJarvis:{b}" for u,b in db_memory]
                 )
 
+            tool_system_result = None
+            tool_system_reply = None
+            tool_system_markup = None
+
             if "เปิดโหมดกวน" in text or "โหมดกวน" in text:
                 personality.set_mode("ROAST")
                 reply = "เปิดโหมดกวนแล้วครับ 😎"
             elif "กลับโหมดปกติ" in text or "โหมดปกติ" in text:
                 personality.set_mode("NORMAL")
                 reply = "กลับโหมดปกติแล้วครับ"
-            elif developer_mode_router.is_developer_command(text):
-                developer_result = developer_mode_router.execute_developer_command(text)
-                reply = _format_developer_result(developer_result)
             else:
+                # Tool System takes priority over Developer Mode for explicit tool commands.
                 tool_system_result = _try_tool_system(text, chat_id)
                 if tool_system_result is not None and tool_system_result.get("handled"):
                     tool_system_reply = tool_system_result["reply"]
@@ -285,10 +280,13 @@ def worker():
                     reply = tool_system_reply
                     auto_saved = "tool_system"
                     result = {"reply": tool_system_reply, "action": None}
+                elif developer_mode_router.is_developer_command(text):
+                    developer_result = developer_mode_router.execute_developer_command(text)
+                    reply = _format_developer_result(developer_result)
+                    result = {"reply": reply, "action": None}
                 else:
-                    tool_system_reply = None
-                    tool_system_markup = None
                     result = ask_jarvis(text, history_text)
+
                 action = intent_router.classify(text) or fallback_intent(text) or result.get("action")
 
                 if isinstance(action, dict):
@@ -307,27 +305,20 @@ def worker():
                 else:
                     if action == "list_jobs":
                         reply = list_jobs()
-
                     elif action == "search_jobs":
                         area = text.replace("งานที่", "").strip()
                         reply = search_jobs(area)
-
                     elif action == "pending_jobs":
                         reply = pending_jobs()
-
                     else:
                         reply = result.get("reply") or "รับทราบครับ"
 
                     plugin_name = None if auto_saved else PLUGIN_MAP.get(action)
-
                     if plugin_name:
                         plugin = plugin_loader.get_plugin(plugin_name)
                         if plugin:
                             action_result = plugin.execute(text)
-                            if plugin_name == "news":
-                                reply = action_result
-                            else:
-                                reply = action_result
+                            reply = action_result
 
                     reply = reply.replace("ค่ะ","ครับ").replace("คะ","ครับ")
 
@@ -335,7 +326,7 @@ def worker():
             print("DEBUG REPLY:", reply)
 
             if chat_id:
-                if auto_saved == "tool_system" and 'tool_system_markup' in locals() and tool_system_markup is not None:
+                if auto_saved == "tool_system" and tool_system_markup is not None:
                     bot.send_message(chat_id, reply, reply_markup=tool_system_markup)
                 else:
                     bot.send_message(chat_id, reply, reply_markup=get_main_keyboard())
@@ -371,19 +362,6 @@ def get_main_keyboard():
     return keyboard
 
 
-@bot.message_handler(commands=['start'])
-def handle_start(m):
-    """ตอบสนองคำสั่ง /start และแสดง Keyboard"""
-    if config.TELEGRAM_CHAT_ID and m.chat.id != config.TELEGRAM_CHAT_ID:
-        logger.warning("Blocked message from unauthorized chat_id=%s", m.chat.id)
-        return
-
-    welcome_message = "สวัสดีครับ! ผมคือ Jarvis ผู้ช่วย AI ของคุณ\n\nเลือกเมนูด้านล่างครับ"
-    bot.send_message(m.chat.id, welcome_message, reply_markup=get_main_keyboard())
-
-
-
-
 @bot.callback_query_handler(func=lambda call: call.data.startswith("tool_approval:"))
 def handle_tool_approval(call):
     if config.TELEGRAM_CHAT_ID and call.message and call.message.chat.id != config.TELEGRAM_CHAT_ID:
@@ -413,13 +391,52 @@ def handle_tool_approval(call):
 
     result = tool_system.execute(item["tool"], item["params"], approved=True)
     bot.answer_callback_query(call.id, "อนุมัติแล้ว")
-    if result.success:
-        data = str(result.data)
-        if len(data) > 3500:
-            data = data[:3500] + "\n… [ตัดข้อความ]"
-        bot.edit_message_text(f"✅ อนุมัติและทำงานแล้ว\n🧰 {item['tool']}\n{data}", call.message.chat.id, call.message.message_id)
-    else:
+
+    if not result.success:
         bot.edit_message_text(f"❌ Tool ทำงานไม่สำเร็จ\n🧰 {item['tool']}\n{result.error}", call.message.chat.id, call.message.message_id)
+        return
+
+    if item["tool"] == "file_write" and isinstance(result.data, dict):
+        target = result.data.get("path", "")
+        backup = result.data.get("backup_path")
+        if str(target).endswith(".py") and backup:
+            target_path = Path(__file__).resolve().parent / target
+            check = subprocess.run(
+                [sys.executable, "-m", "py_compile", str(target_path)],
+                cwd=Path(__file__).resolve().parent,
+                capture_output=True, text=True, timeout=30,
+            )
+            if check.returncode != 0:
+                try:
+                    from tools.file_tool import restore_backup
+                    restore_backup(backup, target)
+                    bot.edit_message_text(
+                        f"⚠️ เขียนไฟล์แล้ว syntax ไม่ผ่าน จึง rollback อัตโนมัติ\n🧰 {item['tool']}\n{check.stderr[-1200:]}",
+                        call.message.chat.id, call.message.message_id,
+                    )
+                except Exception as rollback_error:
+                    bot.edit_message_text(
+                        f"❌ Syntax ไม่ผ่าน และ rollback ไม่สำเร็จ\n{rollback_error}",
+                        call.message.chat.id, call.message.message_id,
+                    )
+                return
+
+    data = str(result.data)
+    if len(data) > 3500:
+        data = data[:3500] + "\n… [ตัดข้อความ]"
+    bot.edit_message_text(f"✅ อนุมัติและทำงานแล้ว\n🧰 {item['tool']}\n{data}", call.message.chat.id, call.message.message_id)
+
+
+@bot.message_handler(commands=['start'])
+def handle_start(m):
+    """ตอบสนองคำสั่ง /start และแสดง Keyboard"""
+    if config.TELEGRAM_CHAT_ID and m.chat.id != config.TELEGRAM_CHAT_ID:
+        logger.warning("Blocked message from unauthorized chat_id=%s", m.chat.id)
+        return
+
+    welcome_message = "สวัสดีครับ! ผมคือ Jarvis ผู้ช่วย AI ของคุณ\n\nเลือกเมนูด้านล่างครับ"
+    bot.send_message(m.chat.id, welcome_message, reply_markup=get_main_keyboard())
+
 
 @bot.message_handler(func=lambda m: True)
 def handle(m):
@@ -441,74 +458,23 @@ def handle(m):
 
 def voice_worker():
     print("🎤 Voice Mode Started")
-
     while True:
         try:
-            text = voice_stt.listen()
-
+            text = voice_stt.listen_and_transcribe()
             if text:
-                print("Voice:", text)
-
+                bot.send_message(config.TELEGRAM_CHAT_ID, f"🎤 {text}")
                 task_queue.put({
                     "chat_id": config.TELEGRAM_CHAT_ID,
                     "text": text,
                     "history": memory_manager.get_memory(5)
                 })
-
-            time.sleep(1)
-
         except Exception as e:
             print("Voice Error:", e)
-            time.sleep(3)
-
-
-def send_reminder_message(message):
-    try:
-        bot.send_message(config.TELEGRAM_CHAT_ID, message)
-    except Exception as e:
-        print("Reminder Send Error:", e)
-
-
-app = FastAPI()
-app.mount("/dashboard", StaticFiles(directory="dashboard", html=True), name="dashboard")
-
-
-@app.get("/pulse", dependencies=[Depends(_check_dashboard_auth)])
-def pulse():
-    return {"status": "ok", "queue": task_queue.qsize(), "time": time.time()}
-
-
-@app.get("/status", dependencies=[Depends(_check_dashboard_auth)])
-def status():
-    try:
-        jobs = list_jobs()
-    except Exception as e:
-        jobs = str(e)
-
-    try:
-        expenses = monthly_summary()
-    except Exception as e:
-        expenses = str(e)
-
-    return {
-        "jarvis": "online",
-        "queue": task_queue.qsize(),
-        "jobs": jobs,
-        "expenses": expenses,
-        "time": time.time()
-    }
-
-
-@app.post("/webhook/feedback")
-def webhook_feedback(data: dict):
-    print("MacroDroid Feedback:", data)
-    return {"status":"ok"}
 
 
 if __name__ == "__main__":
-    threading.Thread(target=worker, daemon=True).start()
-    threading.Thread(target=reminder_worker.worker, args=(send_reminder_message,), daemon=True).start()
-    threading.Thread(target=bot.infinity_polling, daemon=True).start()
-    # threading.Thread(target=voice_worker, daemon=True).start()
     print("Jarvis started")
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    threading.Thread(target=worker, daemon=True).start()
+    threading.Thread(target=voice_worker, daemon=True).start()
+    threading.Thread(target=reminder_worker.run, daemon=True).start()
+    uvicorn.run("run:app", host="127.0.0.1", port=8000, reload=False)
