@@ -55,11 +55,6 @@ def _safe_path(filename: str) -> Path:
     return path
 
 
-def _read(path: Path) -> str:
-    text = path.read_text(encoding="utf-8")
-    return text if len(text) <= MAX_FILE_CHARS else text[:MAX_FILE_CHARS] + "\n# ... TRUNCATED ..."
-
-
 def analyze_file(filename: str) -> dict[str, Any]:
     path = _safe_path(filename)
     if not path.exists():
@@ -89,6 +84,20 @@ def _clean_model_code(value: str) -> str:
     return value.strip() + "\n"
 
 
+def _apply_operations(original: str, operations: list[dict[str, Any]]) -> str:
+    updated = original
+    for index, op in enumerate(operations, 1):
+        old = str(op.get("old_text", ""))
+        new = str(op.get("new_text", ""))
+        if not old:
+            raise ValueError(f"patch operation {index}: old_text ว่าง")
+        count = updated.count(old)
+        if count != 1:
+            raise ValueError(f"patch operation {index}: old_text ต้องพบ 1 ครั้ง แต่พบ {count} ครั้ง")
+        updated = updated.replace(old, new, 1)
+    return updated
+
+
 def prepare_patch(text: str, groq_client=None) -> dict[str, Any]:
     filename = _extract_filename(text)
     if not filename:
@@ -104,9 +113,11 @@ def prepare_patch(text: str, groq_client=None) -> dict[str, Any]:
         return {"ok": False, "error": f"ไฟล์ใหญ่เกิน {MAX_FILE_CHARS} ตัวอักษรสำหรับ patch อัตโนมัติ"}
 
     prompt = f"""คุณเป็น Senior Python Developer ของ Jarvis.
-แก้ไฟล์ตามคำสั่งด้านล่าง และส่ง JSON เท่านั้นในรูปแบบ:
-{{\"new_content\":\"เนื้อหาไฟล์ใหม่ทั้งหมด\",\"summary\":\"สรุปการแก้ 1-3 ข้อ\"}}
-ห้ามแก้ไฟล์อื่น ห้ามตัดโค้ดส่วนที่ไม่เกี่ยวข้อง และต้องส่งเนื้อหาไฟล์ใหม่ครบทั้งไฟล์
+ตอบ JSON เท่านั้นในรูปแบบ:
+{{"operations":[{{"old_text":"ข้อความเดิมแบบตรงตัว","new_text":"ข้อความใหม่"}}],"summary":"สรุปการแก้ 1-3 ข้อ"}}
+ห้ามส่งไฟล์ทั้งไฟล์. ส่งเฉพาะ operations ที่จำเป็นต่อคำสั่ง.
+old_text แต่ละรายการต้องเป็นข้อความที่มีอยู่จริงในไฟล์และต้องพบเพียง 1 ครั้ง.
+ห้ามแก้ไฟล์อื่น.
 
 ไฟล์: {filename}
 คำสั่ง: {text}
@@ -121,15 +132,18 @@ def prepare_patch(text: str, groq_client=None) -> dict[str, Any]:
             response_format={"type": "json_object"},
             messages=[{"role": "user", "content": prompt}],
             temperature=0.1,
-            max_tokens=5000,
+            max_tokens=1800,
         )
         data = json.loads(res.choices[0].message.content)
-        new_content = _clean_model_code(str(data.get("new_content", "")))
+        operations = data.get("operations", [])
+        if not isinstance(operations, list) or not operations:
+            return {"ok": False, "error": "AI ไม่ได้สร้าง patch operations"}
+        new_content = _apply_operations(original, operations)
         summary = str(data.get("summary", "แก้ไขตามคำสั่ง"))
     except Exception as exc:
         return {"ok": False, "error": f"สร้าง patch ไม่สำเร็จ: {exc}"}
 
-    if not new_content or new_content == original:
+    if new_content == original:
         return {"ok": False, "error": "AI ไม่ได้สร้างการเปลี่ยนแปลงใหม่"}
     if path.suffix == ".py":
         try:
@@ -151,6 +165,7 @@ def prepare_patch(text: str, groq_client=None) -> dict[str, Any]:
         "original": original,
         "new_content": new_content,
         "diff": diff,
+        "operations": operations,
         "model": DEV_MODEL,
     }
     _save_session(session)
@@ -189,13 +204,7 @@ def approve(proposal_id: str) -> dict[str, Any]:
                 _save_session(session)
                 return {"ok": False, "error": "ทดสอบ syntax ไม่ผ่าน จึง rollback แล้ว", "test": session["test"]}
 
-        proc = subprocess.run(
-            ["git", "status", "--short", "--", session["file"]],
-            cwd=PROJECT_ROOT,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
+        proc = subprocess.run(["git", "status", "--short", "--", session["file"]], cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=30)
         if proc.returncode != 0:
             raise RuntimeError(proc.stderr.strip() or "git status failed")
 
