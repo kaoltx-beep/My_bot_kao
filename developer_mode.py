@@ -98,6 +98,49 @@ def _apply_operations(original: str, operations: list[dict[str, Any]]) -> str:
     return updated
 
 
+def _parse_patch_response(raw: str) -> dict[str, Any]:
+    """Parse strict JSON or JSON embedded in a fenced/plain response."""
+    text = str(raw or "").strip()
+    if not text:
+        raise ValueError("AI ส่งคำตอบว่าง")
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.S)
+        if fenced:
+            return json.loads(fenced.group(1))
+        start = text.find("{")
+        end = text.rfind("}")
+        if start >= 0 and end > start:
+            return json.loads(text[start:end + 1])
+        raise ValueError("AI ไม่ได้ส่ง JSON ที่อ่านได้")
+
+
+def _request_patch(groq_client, prompt: str) -> dict[str, Any]:
+    """Try strict JSON mode first, then retry as plain text JSON."""
+    try:
+        res = groq_client.chat.completions.create(
+            model=DEV_MODEL,
+            response_format={"type": "json_object"},
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1,
+            max_tokens=1800,
+        )
+        return _parse_patch_response(res.choices[0].message.content)
+    except Exception as first_exc:
+        retry_prompt = prompt + "\n\nIMPORTANT: Return valid JSON only. No markdown."
+        try:
+            res = groq_client.chat.completions.create(
+                model=DEV_MODEL,
+                messages=[{"role": "user", "content": retry_prompt}],
+                temperature=0.0,
+                max_tokens=1800,
+            )
+            return _parse_patch_response(res.choices[0].message.content)
+        except Exception as second_exc:
+            raise RuntimeError(f"JSON request failed: {first_exc}; fallback failed: {second_exc}") from second_exc
+
+
 def prepare_patch(text: str, groq_client=None) -> dict[str, Any]:
     filename = _extract_filename(text)
     if not filename:
@@ -113,10 +156,10 @@ def prepare_patch(text: str, groq_client=None) -> dict[str, Any]:
         return {"ok": False, "error": f"ไฟล์ใหญ่เกิน {MAX_FILE_CHARS} ตัวอักษรสำหรับ patch อัตโนมัติ"}
 
     prompt = f"""คุณเป็น Senior Python Developer ของ Jarvis.
-ตอบ JSON เท่านั้นในรูปแบบ:
-{{"operations":[{{"old_text":"ข้อความเดิมแบบตรงตัว","new_text":"ข้อความใหม่"}}],"summary":"สรุปการแก้ 1-3 ข้อ"}}
-ห้ามส่งไฟล์ทั้งไฟล์. ส่งเฉพาะ operations ที่จำเป็นต่อคำสั่ง.
-old_text แต่ละรายการต้องเป็นข้อความที่มีอยู่จริงในไฟล์และต้องพบเพียง 1 ครั้ง.
+ตอบเป็น JSON object เท่านั้น มี 2 ฟิลด์:
+operations: array ของ objects ที่มี old_text และ new_text
+summary: ข้อความสรุปสั้น ๆ
+ห้ามส่งไฟล์ทั้งไฟล์. old_text ต้องมีอยู่จริงในไฟล์และพบเพียง 1 ครั้ง.
 ห้ามแก้ไฟล์อื่น.
 
 ไฟล์: {filename}
@@ -127,14 +170,7 @@ old_text แต่ละรายการต้องเป็นข้อค�
 {original}
 ---"""
     try:
-        res = groq_client.chat.completions.create(
-            model=DEV_MODEL,
-            response_format={"type": "json_object"},
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.1,
-            max_tokens=1800,
-        )
-        data = json.loads(res.choices[0].message.content)
+        data = _request_patch(groq_client, prompt)
         operations = data.get("operations", [])
         if not isinstance(operations, list) or not operations:
             return {"ok": False, "error": "AI ไม่ได้สร้าง patch operations"}
@@ -207,7 +243,6 @@ def approve(proposal_id: str) -> dict[str, Any]:
         proc = subprocess.run(["git", "status", "--short", "--", session["file"]], cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=30)
         if proc.returncode != 0:
             raise RuntimeError(proc.stderr.strip() or "git status failed")
-
         add = subprocess.run(["git", "add", "--", session["file"]], cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=30)
         if add.returncode != 0:
             raise RuntimeError(add.stderr.strip() or "git add failed")
@@ -261,7 +296,6 @@ def self_test_rollback() -> dict[str, Any]:
         target.write_text(original, encoding="utf-8")
         shutil.copy2(target, backup)
         target.write_text(broken, encoding="utf-8")
-
         proc = subprocess.run(
             [os.fspath(os.sys.executable), "-m", "py_compile", str(target)],
             cwd=PROJECT_ROOT,
@@ -271,7 +305,6 @@ def self_test_rollback() -> dict[str, Any]:
         )
         if proc.returncode == 0:
             return {"ok": False, "status": "failed", "error": "ทดสอบ rollback ไม่ล้มเหลวตามที่คาด"}
-
         shutil.copy2(backup, target)
         restored = target.read_text(encoding="utf-8") == original
         if not restored:
@@ -284,8 +317,7 @@ def self_test_rollback() -> dict[str, Any]:
         backup.unlink(missing_ok=True)
         pycache = target.parent / "__pycache__"
         if pycache.exists():
-            compiled = list(pycache.glob(target.stem + ".*.pyc"))
-            for item in compiled:
+            for item in pycache.glob(target.stem + ".*.pyc"):
                 item.unlink(missing_ok=True)
 
 
