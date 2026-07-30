@@ -1,5 +1,5 @@
 """
-dev_patcher.py — backup + apply patch + syntax check + rollback
+dev_patcher.py — backup + apply patch + syntax check + rollback + git commit
 Cross-platform: Windows, Termux/Android, Linux/macOS.
 """
 import os
@@ -47,6 +47,43 @@ def _check_syntax(rel_path):
     if r.returncode == 0:
         return True, "✅ syntax OK"
     return False, f"❌ syntax error:\n{r.stderr.strip()}"
+
+
+def _git_commit(rel_path, description):
+    """Stage only the changed target and create a local commit."""
+    target = rel_path.replace("\\", "/")
+    message = (description or f"Update {target}").strip()[:120]
+    if not message:
+        message = f"Update {target}"
+    if not message.lower().startswith("jarvis"):
+        message = f"Jarvis: {message}"
+
+    try:
+        add = subprocess.run(
+            ["git", "add", "--", target],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if add.returncode != 0:
+            return False, f"❌ git add ล้มเหลว: {(add.stderr or add.stdout).strip()[-500:]}"
+
+        commit = subprocess.run(
+            ["git", "commit", "-m", message],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        output = (commit.stdout or commit.stderr).strip()
+        if commit.returncode != 0:
+            return False, f"❌ git commit ล้มเหลว: {output[-700:]}"
+        return True, f"✅ git commit สำเร็จ: {output[-500:]}"
+    except FileNotFoundError:
+        return False, "❌ ไม่พบคำสั่ง git บนเครื่องนี้"
+    except Exception as e:
+        return False, f"❌ git commit error: {e}"
 
 
 def _rollback(rel_path, backup_path):
@@ -116,11 +153,14 @@ def apply_plan(plan):
             f"{backup_note}"
         )
 
+    git_ok, git_note = _git_commit(target, description)
+
     return (
         "✅ Patch สำเร็จ!\n"
         f"📝 {description}\n"
         f"🔧 {apply_note}\n"
         f"{syntax_note}\n"
+        f"{git_note}\n"
         f"{backup_note}"
     )
 
@@ -150,7 +190,8 @@ def replace(file_path, target, new_code, insert_after=None):
         return f"❌ apply ล้มเหลว: {e}\n{backup_note}"
 
     passed, syntax_note = _check_syntax(file_path)
-    result = f"{apply_note}\n{syntax_note}"
     if not passed:
-        result += "\n" + _rollback(file_path, backup_path)
-    return result
+        return f"{apply_note}\n{syntax_note}\n" + _rollback(file_path, backup_path)
+
+    git_ok, git_note = _git_commit(file_path, target or f"Update {file_path}")
+    return f"{apply_note}\n{syntax_note}\n{git_note}\n{backup_note}"
