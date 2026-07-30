@@ -1,6 +1,7 @@
 import unittest
 
 from core.default_registry import build_default_registry
+from core.params import parse_tool_params
 from core.registry import ToolRegistry
 from core.router import DeterministicRouter
 from core.safety import evaluate
@@ -51,6 +52,27 @@ class ToolSystemV1Tests(unittest.TestCase):
             "rollback",
         }
         self.assertEqual(names, expected)
+
+    def test_parameter_parser_extracts_python_file(self):
+        call = parse_tool_params("file_read", "อ่านไฟล์ run.py")
+        self.assertIsNotNone(call)
+        self.assertEqual(call.params["path"], "run.py")
+        self.assertGreaterEqual(call.confidence, 0.9)
+
+    def test_parameter_parser_extracts_expense(self):
+        call = parse_tool_params("expense_add", "น้ำมัน 500 บาท")
+        self.assertIsNotNone(call)
+        self.assertEqual(call.params["item"], "น้ำมัน")
+        self.assertEqual(call.params["amount"], 500.0)
+
+    def test_parameter_parser_extracts_commit_message(self):
+        call = parse_tool_params("git_commit", "git commit เพิ่มระบบ Tool")
+        self.assertIsNotNone(call)
+        self.assertEqual(call.params["message"], "เพิ่มระบบ Tool")
+
+    def test_parameter_parser_rejects_missing_required_value(self):
+        self.assertIsNone(parse_tool_params("file_read", "อ่านไฟล์"))
+        self.assertIsNone(parse_tool_params("memory_store", "จำไว้"))
 
     def test_duplicate_registration_is_rejected(self):
         with self.assertRaises(ValueError):
