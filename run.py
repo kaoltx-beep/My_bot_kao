@@ -75,35 +75,25 @@ def fallback_intent(text):
         return "check_battery"
     if "youtube" in text or "ยูทูป" in text:
         return "open_youtube"
-
     if "ข่าว" in text or "news" in text:
         return "news"
-
     if "เดือนนี้" in text or "รายเดือน" in text:
         return "monthly_expense"
-
     if "ดูรายจ่าย" in text or "รายการรายจ่าย" in text:
         return "list_expense"
-
     if "ติดตั้ง" in text or "งานติดตั้ง" in text:
         return "work"
-
     if "ดูงานทั้งหมด" in text:
         return "list_jobs"
-
     if "งานที่" in text:
         return "search_jobs"
-
     if "บันทึกงาน" in text or "เพิ่มงาน" in text or "วันนี้มีงาน" in text:
         return "task"
-
     if "ตั้งเตือน" in text or "ดูรายการเตือน" in text or "ดูเตือน" in text:
         return "reminder"
-
     import re
     if re.search(r".+\s+\d+", text):
         return "add_expense"
-
     return None
 
 
@@ -118,18 +108,9 @@ def ask_jarvis(user_message, history_text=""):
     คุณคือ Jarvis ผู้ช่วย AI ส่วนตัว
     ตอบภาษาไทยเท่านั้น
     พูดสุภาพ ลงท้ายครับ
-    ตอบสั้น กระชับ เข้าใจง่าย
-    ถ้าเป็นความรู้ทั่วไป ให้ตอบจากความรู้ที่มีได้
-    ถ้าไม่แน่ใจ ให้บอกว่าไม่แน่ใจ
-    ห้ามสร้างตัวเลข ข้อมูลระบบ หรือผลการตรวจสอบที่ไม่มีจริง
-    ถ้าไม่เข้าใจคำถาม ให้ถามกลับ
+    ใช้บุคลิกตามโหมดปัจจุบัน
+    ลงท้ายครับ
     """
-#     system_instruction += personality.get_prompt()
-    system_instruction += """
-ตอบเฉพาะ JSON เท่านั้น
-ใช้บุคลิกตามโหมดปัจจุบัน
-ลงท้ายครับ
-"""
 
     prompt = f"""Context:
 {history_text}
@@ -204,13 +185,9 @@ def worker():
 
             auto_saved = auto_work.save_auto_work(text)
             history = task["history"]
-            # history from task might overlap with db_memory, but we'll keep it simple for now
-            # and let the character limit in ask_jarvis handle the total size.
             history_text = "\n".join([f"User:{u}\nJarvis:{b}" for u,b in history])
 
-            # Reduce DB memory lookup to 3 instead of 5 to further save context
             db_memory = memory_manager.get_memory(3)
-
             if db_memory:
                 history_text += "\n\n[Previous Memory]\n" + "\n".join(
                     [f"User:{u}\nJarvis:{b}" for u,b in db_memory]
@@ -229,8 +206,13 @@ def worker():
                 result = ask_jarvis(text, history_text)
                 action = intent_router.classify(text) or fallback_intent(text) or result.get("action")
 
-                if isinstance(action, list):
+                if isinstance(action, dict):
+                    action = action.get("action") or action.get("intent") or action.get("name")
+                elif isinstance(action, list):
                     action = action[0] if action else None
+                if not isinstance(action, str):
+                    action = None
+
                 if auto_saved == "duplicate":
                     reply = "งานนี้ผมบันทึกไว้แล้วครับ"
                 elif auto_saved is True:
@@ -238,27 +220,20 @@ def worker():
                 else:
                     if action == "list_jobs":
                         reply = list_jobs()
-
                     elif action == "search_jobs":
                         area = text.replace("งานที่", "").strip()
                         reply = search_jobs(area)
-
                     elif action == "pending_jobs":
                         reply = pending_jobs()
-
                     else:
                         reply = result.get("reply") or "รับทราบครับ"
 
                     plugin_name = None if auto_saved else PLUGIN_MAP.get(action)
-
                     if plugin_name:
                         plugin = plugin_loader.get_plugin(plugin_name)
                         if plugin:
                             action_result = plugin.execute(text)
-                            if plugin_name == "news":
-                                reply = action_result
-                            else:
-                                reply = action_result
+                            reply = action_result
 
                     reply = reply.replace("ค่ะ","ครับ").replace("คะ","ครับ")
 
@@ -328,25 +303,20 @@ def handle(m):
         })
 
 
-
 def voice_worker():
     print("🎤 Voice Mode Started")
 
     while True:
         try:
             text = voice_stt.listen()
-
             if text:
                 print("Voice:", text)
-
                 task_queue.put({
                     "chat_id": config.TELEGRAM_CHAT_ID,
                     "text": text,
                     "history": memory_manager.get_memory(5)
                 })
-
             time.sleep(1)
-
         except Exception as e:
             print("Voice Error:", e)
             time.sleep(3)
@@ -374,31 +344,21 @@ def status():
         jobs = list_jobs()
     except Exception as e:
         jobs = str(e)
-
     try:
         expenses = monthly_summary()
     except Exception as e:
         expenses = str(e)
-
-    return {
-        "jarvis": "online",
-        "queue": task_queue.qsize(),
-        "jobs": jobs,
-        "expenses": expenses,
-        "time": time.time()
-    }
-
-
-@app.post("/webhook/feedback")
-def webhook_feedback(data: dict):
-    print("MacroDroid Feedback:", data)
-    return {"status":"ok"}
+    return {"status": "ok", "jobs": jobs, "expenses": expenses, "queue": task_queue.qsize()}
 
 
 if __name__ == "__main__":
-    threading.Thread(target=worker, daemon=True).start()
-    threading.Thread(target=reminder_worker.worker, args=(send_reminder_message,), daemon=True).start()
-    threading.Thread(target=bot.infinity_polling, daemon=True).start()
-    # threading.Thread(target=voice_worker, daemon=True).start()
-    print("Jarvis started")
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    from threading import Thread
+    Thread(target=worker, daemon=True).start()
+    try:
+        Thread(target=voice_worker, daemon=True).start()
+    except Exception:
+        pass
+    print("🤖 Jarvis started")
+    print("📡 Telegram polling started")
+    print("🌐 Dashboard: http://127.0.0.1:8000/dashboard")
+    bot.infinity_polling(skip_pending=True)
