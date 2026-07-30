@@ -74,6 +74,7 @@ class DeveloperModeTests(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(result["status"], "committed")
         self.assertEqual(self.target.read_text(encoding="utf-8"), "updated\n")
+        self.assertFalse(list(self.target.parent.glob(self.target.name + ".backup_*")))
         saved = json.loads(self.session_path.read_text(encoding="utf-8"))
         self.assertEqual(saved["status"], "committed")
 
@@ -106,7 +107,7 @@ class DeveloperModeTests(unittest.TestCase):
         saved = json.loads(self.session_path.read_text(encoding="utf-8"))
         self.assertEqual(saved["status"], "tested_uncommitted")
         self.assertIn("commit_error", saved)
-        self.assertTrue((self.target.parent / (self.target.name + ".backup_" + "" )).name.startswith(self.target.name + ".backup_"))
+        self.assertEqual(len(list(self.target.parent.glob(self.target.name + ".backup_*"))), 1)
 
     def test_approve_rolls_back_on_syntax_failure(self):
         target = developer_mode.PROJECT_ROOT / "tests" / "_devmode_target.py"
@@ -135,6 +136,7 @@ class DeveloperModeTests(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertIn("rollback", result["error"])
         self.assertEqual(target.read_text(encoding="utf-8"), "print('original')\n")
+        self.assertFalse(list(target.parent.glob(target.name + ".backup_*")))
         saved = json.loads(session_path.read_text(encoding="utf-8"))
         self.assertEqual(saved["status"], "rolled_back")
 
