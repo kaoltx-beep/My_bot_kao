@@ -3,6 +3,9 @@ import time
 import logging
 import json
 import traceback
+import subprocess
+import sys
+from pathlib import Path
 from queue import Queue
 import telebot
 from groq import Groq
@@ -124,41 +127,29 @@ def fallback_intent(text):
         return "check_battery"
     if "youtube" in text or "ยูทูป" in text:
         return "open_youtube"
-
     if "ข่าว" in text or "news" in text:
         return "news"
-
     if "เดือนนี้" in text or "รายเดือน" in text:
         return "monthly_expense"
-
     if "ดูรายจ่าย" in text or "รายการรายจ่าย" in text:
         return "list_expense"
-
     if "ติดตั้ง" in text or "งานติดตั้ง" in text:
         return "work"
-
     if "ดูงานทั้งหมด" in text:
         return "list_jobs"
-
     if "งานที่" in text:
         return "search_jobs"
-
     if "บันทึกงาน" in text or "เพิ่มงาน" in text or "วันนี้มีงาน" in text:
         return "task"
-
     if "ตั้งเตือน" in text or "ดูรายการเตือน" in text or "ดูเตือน" in text:
         return "reminder"
-
     import re
     if re.search(r".+\s+\d+", text):
         return "add_expense"
-
     return None
 
 
 def ask_jarvis(user_message, history_text=""):
-    # Limit history_text to prevent Groq 413 error
-    # Keeping only the last 3000 characters of history as a safety measure
     max_context_chars = 3000
     if len(history_text) > max_context_chars:
         history_text = "..." + history_text[-max_context_chars:]
@@ -173,7 +164,6 @@ def ask_jarvis(user_message, history_text=""):
     ห้ามสร้างตัวเลข ข้อมูลระบบ หรือผลการตรวจสอบที่ไม่มีจริง
     ถ้าไม่เข้าใจคำถาม ให้ถามกลับ
     """
-#     system_instruction += personality.get_prompt()
     system_instruction += """
 ตอบเฉพาะ JSON เท่านั้น
 ใช้บุคลิกตามโหมดปัจจุบัน
@@ -208,11 +198,9 @@ User:
 
 
 def _format_developer_result(result):
-    """Convert Developer Mode analysis into a compact Telegram-safe reply."""
     files = result.get("files") or []
     if not files:
         return "🛠 Developer Mode\nไม่พบไฟล์ที่ตรงกับคำสั่งครับ"
-
     lines = ["🛠 Developer Mode", f"ตรวจพบ {len(files)} ไฟล์:"]
     for item in files[:20]:
         status = "✅" if item.get("status") == "ok" else "❌"
@@ -222,7 +210,6 @@ def _format_developer_result(result):
         else:
             errors = "; ".join(item.get("errors", []))[:180]
             lines.append(f"{status} {path}: {errors}")
-
     if len(files) > 20:
         lines.append(f"… และอีก {len(files) - 20} ไฟล์")
     return "\n".join(lines)
@@ -250,16 +237,12 @@ def worker():
         try:
             chat_id = task["chat_id"]
             text = task["text"]
-
             auto_saved = auto_work.save_auto_work(text)
             history = task["history"]
             history_text = "\n".join([f"User:{u}\nJarvis:{b}" for u,b in history])
             db_memory = memory_manager.get_memory(3)
-
             if db_memory:
-                history_text += "\n\n[Previous Memory]\n" + "\n".join(
-                    [f"User:{u}\nJarvis:{b}" for u,b in db_memory]
-                )
+                history_text += "\n\n[Previous Memory]\n" + "\n".join([f"User:{u}\nJarvis:{b}" for u,b in db_memory])
 
             tool_system_result = None
             tool_system_reply = None
@@ -272,7 +255,7 @@ def worker():
                 personality.set_mode("NORMAL")
                 reply = "กลับโหมดปกติแล้วครับ"
             else:
-                # Tool System takes priority over Developer Mode for explicit tool commands.
+                # Explicit Tool commands take priority over Developer Mode.
                 tool_system_result = _try_tool_system(text, chat_id)
                 if tool_system_result is not None and tool_system_result.get("handled"):
                     tool_system_reply = tool_system_result["reply"]
@@ -288,7 +271,6 @@ def worker():
                     result = ask_jarvis(text, history_text)
 
                 action = intent_router.classify(text) or fallback_intent(text) or result.get("action")
-
                 if isinstance(action, dict):
                     action = action.get("action") or action.get("intent") or action.get("name")
                 elif isinstance(action, list):
@@ -302,7 +284,7 @@ def worker():
                     reply = "งานนี้ผมบันทึกไว้แล้วครับ"
                 elif auto_saved is True:
                     reply = "บันทึกงานติดตั้งไฟเบอร์เสร็จแล้วครับ"
-                else:
+                elif 'result' in locals():
                     if action == "list_jobs":
                         reply = list_jobs()
                     elif action == "search_jobs":
@@ -312,14 +294,11 @@ def worker():
                         reply = pending_jobs()
                     else:
                         reply = result.get("reply") or "รับทราบครับ"
-
                     plugin_name = None if auto_saved else PLUGIN_MAP.get(action)
                     if plugin_name:
                         plugin = plugin_loader.get_plugin(plugin_name)
                         if plugin:
-                            action_result = plugin.execute(text)
-                            reply = action_result
-
+                            reply = plugin.execute(text)
                     reply = reply.replace("ค่ะ","ครับ").replace("คะ","ครับ")
 
             print("DEBUG CHAT:", chat_id)
@@ -334,9 +313,7 @@ def worker():
                 tts.speak(reply)
             except Exception as e:
                 print("TTS Error:",e)
-
             memory_manager.save_memory(text, reply)
-
         except Exception as e:
             traceback.print_exc()
             _send_admin_alert(traceback.format_exc())
@@ -345,7 +322,6 @@ def worker():
 
 
 def get_main_keyboard():
-    """สร้าง Telegram Reply Keyboard ภาษาไทย"""
     keyboard = telebot.types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
     buttons = [
         telebot.types.KeyboardButton("🤖 Jarvis Menu"),
@@ -367,60 +343,42 @@ def handle_tool_approval(call):
     if config.TELEGRAM_CHAT_ID and call.message and call.message.chat.id != config.TELEGRAM_CHAT_ID:
         bot.answer_callback_query(call.id, "ไม่ได้รับอนุญาต")
         return
-
     parts = call.data.split(":", 2)
     if len(parts) != 3:
         bot.answer_callback_query(call.id, "ข้อมูลอนุมัติไม่ถูกต้อง")
         return
-
     action, approval_id = parts[1], parts[2]
     status = "approved" if action == "approve" else "rejected" if action == "reject" else None
     if status is None:
         bot.answer_callback_query(call.id, "คำสั่งไม่ถูกต้อง")
         return
-
     item = consume_approval(approval_id, status)
     if item is None:
         bot.answer_callback_query(call.id, "คำขอนี้ถูกใช้ไปแล้วหรือหมดอายุ")
         return
-
     if status == "rejected":
         bot.answer_callback_query(call.id, "ยกเลิกแล้ว")
         bot.edit_message_text("❌ ยกเลิก Tool: " + item["tool"], call.message.chat.id, call.message.message_id)
         return
-
     result = tool_system.execute(item["tool"], item["params"], approved=True)
     bot.answer_callback_query(call.id, "อนุมัติแล้ว")
-
     if not result.success:
         bot.edit_message_text(f"❌ Tool ทำงานไม่สำเร็จ\n🧰 {item['tool']}\n{result.error}", call.message.chat.id, call.message.message_id)
         return
-
     if item["tool"] == "file_write" and isinstance(result.data, dict):
         target = result.data.get("path", "")
         backup = result.data.get("backup_path")
         if str(target).endswith(".py") and backup:
             target_path = Path(__file__).resolve().parent / target
-            check = subprocess.run(
-                [sys.executable, "-m", "py_compile", str(target_path)],
-                cwd=Path(__file__).resolve().parent,
-                capture_output=True, text=True, timeout=30,
-            )
+            check = subprocess.run([sys.executable, "-m", "py_compile", str(target_path)], cwd=Path(__file__).resolve().parent, capture_output=True, text=True, timeout=30)
             if check.returncode != 0:
                 try:
                     from tools.file_tool import restore_backup
                     restore_backup(backup, target)
-                    bot.edit_message_text(
-                        f"⚠️ เขียนไฟล์แล้ว syntax ไม่ผ่าน จึง rollback อัตโนมัติ\n🧰 {item['tool']}\n{check.stderr[-1200:]}",
-                        call.message.chat.id, call.message.message_id,
-                    )
+                    bot.edit_message_text(f"⚠️ เขียนไฟล์แล้ว syntax ไม่ผ่าน จึง rollback อัตโนมัติ\n🧰 {item['tool']}\n{check.stderr[-1200:]}", call.message.chat.id, call.message.message_id)
                 except Exception as rollback_error:
-                    bot.edit_message_text(
-                        f"❌ Syntax ไม่ผ่าน และ rollback ไม่สำเร็จ\n{rollback_error}",
-                        call.message.chat.id, call.message.message_id,
-                    )
+                    bot.edit_message_text(f"❌ Syntax ไม่ผ่าน และ rollback ไม่สำเร็จ\n{rollback_error}", call.message.chat.id, call.message.message_id)
                 return
-
     data = str(result.data)
     if len(data) > 3500:
         data = data[:3500] + "\n… [ตัดข้อความ]"
@@ -429,31 +387,23 @@ def handle_tool_approval(call):
 
 @bot.message_handler(commands=['start'])
 def handle_start(m):
-    """ตอบสนองคำสั่ง /start และแสดง Keyboard"""
     if config.TELEGRAM_CHAT_ID and m.chat.id != config.TELEGRAM_CHAT_ID:
         logger.warning("Blocked message from unauthorized chat_id=%s", m.chat.id)
         return
-
     welcome_message = "สวัสดีครับ! ผมคือ Jarvis ผู้ช่วย AI ของคุณ\n\nเลือกเมนูด้านล่างครับ"
     bot.send_message(m.chat.id, welcome_message, reply_markup=get_main_keyboard())
 
 
 @bot.message_handler(func=lambda m: True)
 def handle(m):
-    # Security: drop messages from unknown senders
     if config.TELEGRAM_CHAT_ID and m.chat.id != config.TELEGRAM_CHAT_ID:
         logger.warning("Blocked message from unauthorized chat_id=%s", m.chat.id)
         return
     if m.text:
-        # Sanitise input: strip whitespace, enforce max length
         text = m.text.strip()[:2000]
         if not text:
             return
-        task_queue.put({
-            "chat_id": m.chat.id,
-            "text": text,
-            "history": memory_manager.get_memory(5)
-        })
+        task_queue.put({"chat_id": m.chat.id, "text": text, "history": memory_manager.get_memory(5)})
 
 
 def voice_worker():
@@ -463,11 +413,7 @@ def voice_worker():
             text = voice_stt.listen_and_transcribe()
             if text:
                 bot.send_message(config.TELEGRAM_CHAT_ID, f"🎤 {text}")
-                task_queue.put({
-                    "chat_id": config.TELEGRAM_CHAT_ID,
-                    "text": text,
-                    "history": memory_manager.get_memory(5)
-                })
+                task_queue.put({"chat_id": config.TELEGRAM_CHAT_ID, "text": text, "history": memory_manager.get_memory(5)})
         except Exception as e:
             print("Voice Error:", e)
 
