@@ -67,9 +67,11 @@ class TestRunnerTool(BaseTool):
     metadata = ToolMetadata(
         name="test_runner",
         version="1.0.0",
-        description="รัน unittest ของ Jarvis",
+        description="รัน unittest ของ Jarvis และคืนผลการทดสอบ",
         category="test",
-        risk_level="medium",
+        # V1: this runner only executes the project's unittest suite.
+        # It does not accept arbitrary shell commands and remains bounded by timeout.
+        risk_level="low",
         timeout_seconds=60,
         parameters={"required": []},
     )
