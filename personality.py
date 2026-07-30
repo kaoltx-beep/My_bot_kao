@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+from pathlib import Path
 
 MODE_FILE = "jarvis_mode.json"
 
@@ -29,13 +30,13 @@ MODES = {
 
 กฎ:
 - ตอบภาษาไทยเป็นหลัก
-- คำถามทั่วไปต้องมีคำตอบจริง ห้ามตอบแค่ "รับทราบครับ", "โอเคครับ" หรือข้อความรับเรื่องที่ไม่ตอบคำถาม
+- คำถามทั่วไปต้องมีคำตอบจริง ห้ามตอบแค่ "รับทราบครับ" หรือ "โอเคครับ"
 - ถ้าคำถามกำกวม ให้ถามกลับสั้นๆ แทนการเดา
 - กวน ประชด จิกกัด และด่าได้แรงพอสมควรในเชิงหยอกล้อ
-- ใช้คำหยาบได้เมื่อเข้ากับบริบท เช่น กู มึง แม่ง โคตร บ้า ชิบหาย แต่ต้องไม่เหยียดเชื้อชาติ ศาสนา เพศ ความพิการ หรือกลุ่มคุ้มครองใดๆ
-- เน้นด่าความคิด การตัดสินใจ ความซุ่มซ่าม หรือสถานการณ์ ไม่ใช่คุณค่าความเป็นมนุษย์ของผู้ใช้
-- ห้ามข่มขู่ ทำร้าย หรือชวนทำร้ายใคร
-- ห้ามสร้างข้อมูลเท็จเพื่อเอามาด่า
+- ใช้คำหยาบได้เมื่อเข้ากับบริบท เช่น กู มึง แม่ง โคตร บ้า ชิบหาย แต่ต้องไม่เหยียดกลุ่มคุ้มครองใดๆ
+- เน้นด่าความคิด การตัดสินใจ ความซุ่มซ่าม หรือสถานการณ์ ไม่ใช่คุณค่าความเป็นมนุษย์
+- ห้ามข่มขู่หรือชวนทำร้ายใคร
+- ห้ามสร้างข้อมูลเท็จ
 - ห้ามแต่งคำไม่มีความหมาย
 - ถ้าเรื่องจริงจังหรืออันตราย ให้ลดความกวนและตอบจริงจัง
 """
@@ -44,16 +45,31 @@ MODES = {
 _ORIGINAL_ASK = None
 
 
+def _find_run_module():
+    """Find the live run.py module whether Python named it run or __main__."""
+    module = sys.modules.get("run")
+    if module is not None and getattr(module, "__file__", ""):
+        return module
+
+    module = sys.modules.get("__main__")
+    if module is not None:
+        path = Path(getattr(module, "__file__", "")).resolve()
+        if path.name == "run.py":
+            return module
+    return None
+
+
 def _install_roast_ask_guard():
     global _ORIGINAL_ASK
-    run_module = sys.modules.get("run")
+    run_module = _find_run_module()
     if run_module is None or not hasattr(run_module, "ask_jarvis"):
         return False
+
     current = run_module.ask_jarvis
     if getattr(current, "_jarvis_roast_ask_guard", False):
         return True
-    _ORIGINAL_ASK = current
 
+    _ORIGINAL_ASK = current
     from roast_rules import reply as roast_reply
 
     def guarded_ask_jarvis(user_message, history_text=""):
@@ -70,7 +86,7 @@ def _install_roast_ask_guard():
 
 def _remove_roast_ask_guard():
     global _ORIGINAL_ASK
-    run_module = sys.modules.get("run")
+    run_module = _find_run_module()
     if run_module is None:
         return
     current = getattr(run_module, "ask_jarvis", None)
@@ -116,6 +132,5 @@ def get_prompt():
     return MODES.get(CURRENT_MODE, MODES["NORMAL"])
 
 
-# Re-install the guard when this module is reloaded while run.ask_jarvis exists.
 if CURRENT_MODE == "ROAST":
     _install_roast_ask_guard()
