@@ -42,8 +42,8 @@ class GitStatusTool(BaseTool):
 class GitCommitTool(BaseTool):
     metadata = ToolMetadata(
         name="git_commit",
-        version="1.2.0",
-        description="stage เฉพาะ tracked changes ที่อนุญาต แล้ว commit ด้วยข้อความที่ระบุ",
+        version="1.3.0",
+        description="stage tracked changes แล้วกันไฟล์ local config ออกจาก commit",
         category="git",
         risk_level="high",
         require_approval=True,
@@ -55,29 +55,17 @@ class GitCommitTool(BaseTool):
         if not message:
             raise ValueError("commit message is required")
 
-        status = _git(["status", "--short"])
-        candidates: list[str] = []
-        for line in status.splitlines():
-            if not line or line.startswith("??"):
-                continue
-            path = line[3:].strip()
-            if " -> " in path:
-                path = path.split(" -> ", 1)[1].strip()
-            if path in COMMIT_EXCLUDES:
-                continue
-            candidates.append(path)
+        # Never add untracked files. Stage tracked modifications/deletions only.
+        _git(["add", "-u"])
 
-        if not candidates:
+        # Explicitly remove machine-local configuration from the index.
+        for path in COMMIT_EXCLUDES:
+            _git(["restore", "--staged", "--", path])
+
+        staged_paths = [p for p in _git(["diff", "--cached", "--name-only"]).splitlines() if p]
+        if not staged_paths:
             raise RuntimeError("ไม่มี tracked changes ที่อนุญาตให้ commit")
 
-        # Stage only the selected tracked paths. Never use `git add .`.
-        _git(["add", "-u", "--", *candidates])
-        staged = _git(["diff", "--cached", "--name-only"])
-        staged_paths = [p for p in staged.splitlines() if p]
-        if not staged_paths:
-            raise RuntimeError("ไม่มีไฟล์ถูก stage หลัง git add -u")
-
-        # Defensive check: config.py must never cross the commit boundary.
         forbidden_staged = sorted(COMMIT_EXCLUDES.intersection(staged_paths))
         if forbidden_staged:
             _git(["restore", "--staged", "--", *forbidden_staged])
