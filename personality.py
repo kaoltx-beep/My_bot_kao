@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 
 MODE_FILE = "jarvis_mode.json"
 
@@ -23,31 +24,58 @@ MODES = {
 คุณคือ Jarvis โหมดกวนตีนของผู้ใช้
 
 ลำดับความสำคัญ:
-1. ตอบคำถามของผู้ใช้ให้ตรงและถูกต้องก่อน
+1. ตอบคำถามของผู้ใช้ให้ตรงและถูกต้องก่อนเสมอ
 2. หลังจากตอบแล้วค่อยกวน ประชด หรือด่าแบบหยอกล้อ
 
 กฎ:
 - ตอบภาษาไทยเป็นหลัก
-- คำถามทั่วไปต้องมีคำตอบจริง ห้ามตอบแค่ "รับทราบครับ", "โอเคครับ", "วันนี้ดีครับ" หรือข้อความรับเรื่องที่ไม่ตอบคำถาม
-- ถ้าผู้ใช้ถามว่า "วันนี้เป็นไง" ให้ตอบเรื่องอารมณ์หรือบริบทของการสนทนาแบบตรงๆ ก่อน แล้วค่อยแซว
+- คำถามทั่วไปต้องมีคำตอบจริง ห้ามตอบแค่ "รับทราบครับ", "โอเคครับ" หรือข้อความรับเรื่องที่ไม่ตอบคำถาม
+- ถ้าคำถามกำกวม ให้ถามกลับสั้นๆ แทนการเดา
 - กวน ประชด จิกกัด และด่าได้แรงพอสมควรในเชิงหยอกล้อ
 - ใช้คำหยาบได้เมื่อเข้ากับบริบท เช่น กู มึง แม่ง โคตร บ้า ชิบหาย แต่ต้องไม่เหยียดเชื้อชาติ ศาสนา เพศ ความพิการ หรือกลุ่มคุ้มครองใดๆ
 - เน้นด่าความคิด การตัดสินใจ ความซุ่มซ่าม หรือสถานการณ์ ไม่ใช่คุณค่าความเป็นมนุษย์ของผู้ใช้
 - ห้ามข่มขู่ ทำร้าย หรือชวนทำร้ายใคร
 - ห้ามสร้างข้อมูลเท็จเพื่อเอามาด่า
-- ถ้าเป็นเรื่องสำคัญหรืออันตราย ให้ลดมุกและตอบจริงจัง
-- ถ้าคำถามกำกวม ให้ถามกลับสั้นๆ แทนการเดา
-- ห้ามใช้คำที่ไม่มีความหมายหรือแต่งคำประหลาด เช่น "แกรดดีเลย"
-- อย่าเล่นมุกหรือคำด่าซ้ำรูปแบบเดิมทุกครั้ง
-
-ตัวอย่างสไตล์:
-ผู้ใช้: วันนี้เป็นไง
-คำตอบแนวที่ต้องการ: วันนี้ก็ดีครับ แต่ถ้ามึงถามเพราะกำลังนั่งเหงาอยู่ ก็พูดมาตรงๆ ไอ้บ้า
-
-ผู้ใช้: มึงพูดอะไร
-คำตอบแนวที่ต้องการ: กูบอกว่าวันนี้โอเคไง มึงฟังไม่ทันหรือสมองกำลังโหลดอยู่
+- ห้ามแต่งคำไม่มีความหมาย เช่น "แกรดดีเลย"
+- ถ้าเรื่องจริงจังหรืออันตราย ให้ลดความกวนและตอบจริงจัง
 """
 }
+
+_CURRENT_ORIGINAL_ASK = None
+
+
+def _install_roast_wrapper():
+    """Install a deterministic roast filter around run.ask_jarvis after run is loaded."""
+    global _CURRENT_ORIGINAL_ASK
+    run_module = sys.modules.get("run")
+    if run_module is None or not hasattr(run_module, "ask_jarvis"):
+        return
+    current = run_module.ask_jarvis
+    if getattr(current, "_jarvis_roast_wrapper", False):
+        return
+    _CURRENT_ORIGINAL_ASK = current
+
+    from roast_rules import reply as deterministic_roast_reply
+
+    def wrapped_ask_jarvis(user_message, history_text=""):
+        if CURRENT_MODE == "ROAST":
+            fixed = deterministic_roast_reply(user_message)
+            if fixed:
+                return {"reply": fixed, "action": None}
+        return current(user_message, history_text)
+
+    wrapped_ask_jarvis._jarvis_roast_wrapper = True
+    run_module.ask_jarvis = wrapped_ask_jarvis
+
+
+def _remove_roast_wrapper():
+    global _CURRENT_ORIGINAL_ASK
+    run_module = sys.modules.get("run")
+    if run_module is None:
+        return
+    if _CURRENT_ORIGINAL_ASK is not None and getattr(run_module.ask_jarvis, "_jarvis_roast_wrapper", False):
+        run_module.ask_jarvis = _CURRENT_ORIGINAL_ASK
+    _CURRENT_ORIGINAL_ASK = None
 
 
 def load_mode():
@@ -71,6 +99,10 @@ def set_mode(mode):
         CURRENT_MODE = mode
         with open(MODE_FILE, "w", encoding="utf-8") as f:
             json.dump({"mode": mode}, f, ensure_ascii=False)
+        if mode == "ROAST":
+            _install_roast_wrapper()
+        else:
+            _remove_roast_wrapper()
         return True
     return False
 
