@@ -1,6 +1,7 @@
 import os
 import json
 import ast
+import re
 from groq import Groq
 from config import GROQ_API_KEY
 
@@ -71,58 +72,82 @@ def _extract_json(text):
     return None
 
 
+def _extract_create_target(request):
+    """Extract a path from commands such as 'สร้างไฟล์ developer/test_jarvis.py'."""
+    match = re.search(r"สร้าง\s*ไฟล์(?:\s*ใหม่)?\s+([^\s]+)", request.strip(), re.IGNORECASE)
+    if not match:
+        return None
+    target = match.group(1).strip().strip('"\'').rstrip(".,")
+    return target or None
+
+
 def analyze(user_request):
     try:
-        client    = Groq(api_key=GROQ_API_KEY)
+        client = Groq(api_key=GROQ_API_KEY)
         all_files = _list_files()
-        relevant  = _pick_files(user_request, all_files)
 
-        file_ctx = ""
-        for rel in relevant:
-            file_ctx += f"\n### {rel}\n{_read_snippet(rel)}\n"
+        # Deterministic create-file path. Do not ask the model to guess
+        # whether a clearly stated create-file request is a patch operation.
+        create_target = _extract_create_target(user_request)
+        if create_target:
+            target = create_target.replace("\\", "/")
+            protected_files = {"run.py", "config.py", ".env", "plugin_loader.py", "plugin_router.py", "__init__.py"}
+            if any(p in target for p in protected_files):
+                return {"error": f"❌ ไม่อนุญาตให้สร้าง/แก้ไข {target} (protected file)"}
 
-        # ── Call 1: แผนงาน (JSON เล็ก ไม่มีโค้ด) ────────────────────────
-        r1 = client.chat.completions.create(
-            model=MODEL,
-            max_tokens=300,
-            messages=[
-                {"role": "system", "content": (
-                    "ตอบ JSON บรรทัดเดียว ห้ามพูดเพิ่ม\n"
-                    'format: {"target_file":"path","action":"create_file or add_function","function_name":"name","description":"text"}\n'
-                    "ไฟล์ที่ห้ามเลือก: run.py, config.py, __init__.py, dev_router.py, dev_agent.py, dev_patcher.py, plugin_loader.py, plugin_router.py\n"
-                    "ถ้าคำสั่งเป็นการสร้าง plugin ใหม่ ให้ action=create_file และ target_file เป็น plugins/ชื่อไฟล์.py เท่านั้น\n"
-                    "ห้ามแก้ไฟล์ protected เช่น run.py config.py dev_agent.py"
-                )},
-                {"role": "user", "content": (
-                    f"คำสั่ง: {user_request}\n"
-                    f"ไฟล์: {', '.join(all_files)}\n"
-                    f"{file_ctx}"
-                )},
-            ]
-        )
+            base_name = os.path.splitext(os.path.basename(target))[0]
+            func_name = re.sub(r"\W+", "_", base_name).strip("_") or "new_file"
+            description = user_request
+            action = "create_file"
+        else:
+            relevant = _pick_files(user_request, all_files)
 
-        plan = _extract_json(r1.choices[0].message.content.strip())
-        if not plan:
-            return {"error": f"Call1 ไม่ได้ JSON: {r1.choices[0].message.content[:120]}"}
+            file_ctx = ""
+            for rel in relevant:
+                file_ctx += f"\n### {rel}\n{_read_snippet(rel)}\n"
 
-        target      = plan.get("target_file", "")
-        action      = plan.get("action", "add_function")
-        func_name   = plan.get("function_name", "new_func")
-        description = plan.get("description", user_request)
+            # Call 1: แผนงาน
+            r1 = client.chat.completions.create(
+                model=MODEL,
+                max_tokens=300,
+                messages=[
+                    {"role": "system", "content": (
+                        "ตอบ JSON บรรทัดเดียว ห้ามพูดเพิ่ม\n"
+                        '{"target_file":"path","action":"create_file or add_function","function_name":"name","description":"text"}\n'
+                        "ไฟล์ที่ห้ามเลือก: run.py, config.py, __init__.py, dev_router.py, dev_agent.py, dev_patcher.py, plugin_loader.py, plugin_router.py\n"
+                        "ถ้าคำสั่งเป็นการสร้าง plugin ใหม่ ให้ action=create_file และ target_file เป็น plugins/ชื่อไฟล์.py เท่านั้น\n"
+                        "ห้ามแก้ไฟล์ protected เช่น run.py config.py dev_agent.py"
+                    )},
+                    {"role": "user", "content": (
+                        f"คำสั่ง: {user_request}\n"
+                        f"ไฟล์: {', '.join(all_files)}\n"
+                        f"{file_ctx}"
+                    )},
+                ]
+            )
 
-        if not target:
-            return {"error": "Call1 ไม่ระบุ target_file"}
+            plan = _extract_json(r1.choices[0].message.content.strip())
+            if not plan:
+                return {"error": f"Call1 ไม่ได้ JSON: {r1.choices[0].message.content[:120]}"}
 
-        # ตรวจ PROTECTED — ห้ามแก้ไฟล์สำคัญ
-        protected_files = {"run.py", "config.py", ".env", "plugin_loader.py", "plugin_router.py", "__init__.py"}
-        if target.startswith("plugins/"):
-            pass
-        elif any(p in target for p in protected_files):
-            return {"error": f"❌ ไม่อนุญาตให้แก้ไข {target} (protected file)"}
+            target = plan.get("target_file", "")
+            action = plan.get("action", "add_function")
+            func_name = plan.get("function_name", "new_func")
+            description = plan.get("description", user_request)
+
+            if not target:
+                return {"error": "Call1 ไม่ระบุ target_file"}
+
+            protected_files = {"run.py", "config.py", ".env", "plugin_loader.py", "plugin_router.py", "__init__.py"}
+            if target.startswith("plugins/"):
+                pass
+            elif any(p in target for p in protected_files):
+                return {"error": f"❌ ไม่อนุญาตให้แก้ไข {target} (protected file)"}
+
         existing = _read_snippet(target) if os.path.exists(
             os.path.join(PROJECT_ROOT, target)) else "(ไฟล์ใหม่)"
 
-        # ── Call 2: เขียนโค้ด + retry สูงสุด 3 รอบ ───────────────────────
+        # Call 2: เขียนโค้ด + retry สูงสุด 3 รอบ
         messages = [
             {"role": "system", "content": (
                 "เขียน Python function เท่านั้น\n"
@@ -151,12 +176,12 @@ def analyze(user_request):
             ok, err = _validate(new_code)
             if ok:
                 return {
-                    "target_file":  target,
-                    "action":       action,
-                    "new_code":     new_code,
+                    "target_file": target,
+                    "action": action,
+                    "new_code": new_code,
                     "insert_after": None,
-                    "description":  description,
-                    "error":        None,
+                    "description": description,
+                    "error": None,
                 }
 
             last_err = err
