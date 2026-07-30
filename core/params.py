@@ -38,6 +38,23 @@ def parse_tool_params(tool_name: str, text: str) -> ParsedToolCall | None:
                 return ParsedToolCall(tool_name, {"path": _clean_path(match.group(1))}, 0.95)
         return None
 
+    if tool_name == "file_write":
+        match = re.search(
+            r"(?:แก้|เขียน|สร้าง)\s*(?:ไฟล์)?\s*([\w./-]+\.(?:py|txt|md|json|sh|cfg|ini))\s*[:：]\s*(.+)$",
+            normalized,
+            re.IGNORECASE | re.DOTALL,
+        )
+        if match:
+            content = match.group(2).strip()
+            if not content:
+                return None
+            return ParsedToolCall(
+                tool_name,
+                {"path": _clean_path(match.group(1)), "content": content},
+                0.92,
+            )
+        return None
+
     if tool_name == "project_scan":
         return ParsedToolCall(tool_name, {}, 0.95)
 
