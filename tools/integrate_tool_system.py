@@ -15,12 +15,10 @@ TOOL_BRANCH_MARK = 'if auto_saved == "tool_system":'
 
 IMPORT_BLOCK = "from core.tool_system import JarvisToolSystem\n"
 INSTANCE_BLOCK = "tool_system = JarvisToolSystem()\n"
-HELPER_BLOCK = '''\n\ndef _try_tool_system(text):\n    """V1 bridge v2: parse parameters and execute low-risk tools only."""\n    try:\n        call = tool_system.parse(text)\n        if call is None:\n            return None\n\n        tool = tool_system.registry.get(call.tool_name)\n        if tool is None:\n            return None\n        if tool.metadata.risk_level != "low":\n            return None\n\n        result = tool_system.execute(call.tool_name, call.params)\n        if not result.success:\n            return f"🛠 Tool {call.tool_name} ไม่สำเร็จ: {result.error}"\n\n        data = result.data\n        if isinstance(data, list):\n            data = "\\n".join(" | ".join(map(str, row)) if isinstance(row, (list, tuple)) else str(row) for row in data)\n        return f"🧰 {call.tool_name}\\n{data}"\n    except Exception as exc:\n        print("Tool System Error:", exc)\n        return None\n'''
+HELPER_BLOCK = '''\n\ndef _try_tool_system(text):\n    """V1 bridge v3: parse parameters and execute low-risk tools only."""\n    try:\n        call = tool_system.parse(text)\n        if call is None:\n            return None\n\n        tool = tool_system.registry.get(call.tool_name)\n        if tool is None:\n            return None\n        if tool.metadata.risk_level != "low":\n            return None\n\n        result = tool_system.execute(call.tool_name, call.params)\n        if not result.success:\n            return f"🛠 Tool {call.tool_name} ไม่สำเร็จ: {result.error}"\n\n        data = result.data\n        if isinstance(data, list):\n            data = "\\n".join(" | ".join(map(str, row)) if isinstance(row, (list, tuple)) else str(row) for row in data)\n        data = str(data)\n\n        # Telegram message limit is 4096 characters; keep headroom for prefixes.\n        max_chars = 3500\n        if len(data) > max_chars:\n            data = data[:max_chars] + "\\n… [ตัดข้อความเพื่อป้องกัน Telegram message too long]"\n        return f"🧰 {call.tool_name}\\n{data}"\n    except Exception as exc:\n        print("Tool System Error:", exc)\n        return None\n'''
 LEGACY_HELPER_BLOCK = '''\n\ndef _try_tool_system(text):\n    """V1 bridge: execute only low-risk tools with no required parameters."""\n    try:\n        route = tool_system.route(text)\n        if route is None:\n            return None\n        tool = tool_system.registry.get(route.tool_name)\n        if tool is None:\n            return None\n        if tool.metadata.risk_level != "low":\n            return None\n        required = tool.metadata.parameters.get("required", [])\n        if required:\n            return None\n\n        result = tool_system.execute(route.tool_name)\n        if not result.success:\n            return f"🛠 Tool {route.tool_name} ไม่สำเร็จ: {result.error}"\n\n        data = result.data\n        if isinstance(data, list):\n            data = "\\n".join(" | ".join(map(str, row)) if isinstance(row, (list, tuple)) else str(row) for row in data)\n        return f"🧰 {route.tool_name}\\n{data}"\n    except Exception as exc:\n        print("Tool System Error:", exc)\n        return None\n'''
-
 OLD_BRANCH = '''            else:\n                result = ask_jarvis(text, history_text)\n'''
 NEW_BRANCH = '''            else:\n                tool_system_reply = _try_tool_system(text)\n                if tool_system_reply is not None:\n                    reply = tool_system_reply\n                    auto_saved = "tool_system"\n                    result = {"reply": tool_system_reply, "action": None}\n                else:\n                    result = ask_jarvis(text, history_text)\n'''
-
 OLD_AUTOSAVE_BRANCH = '''                if auto_saved == "duplicate":\n                    reply = "งานนี้ผมบันทึกไว้แล้วครับ"\n                elif auto_saved is True:\n                    reply = "บันทึกงานติดตั้งไฟเบอร์เสร็จแล้วครับ"\n                else:\n'''
 NEW_AUTOSAVE_BRANCH = '''                if auto_saved == "tool_system":\n                    reply = tool_system_reply\n                elif auto_saved == "duplicate":\n                    reply = "งานนี้ผมบันทึกไว้แล้วครับ"\n                elif auto_saved is True:\n                    reply = "บันทึกงานติดตั้งไฟเบอร์เสร็จแล้วครับ"\n                else:\n'''
 
@@ -49,8 +47,12 @@ def integrate() -> None:
         if needle not in source:
             raise SystemExit("หาจุดแทรก Tool bridge ไม่พบ: หยุดเพื่อความปลอดภัย")
         source = source.replace(needle, HELPER_BLOCK + "\n" + needle, 1)
-    elif "V1 bridge v2" not in source:
-        if LEGACY_HELPER_BLOCK in source:
+    elif "V1 bridge v3" not in source:
+        if "V1 bridge v2" in source:
+            start = source.index("\ndef _try_tool_system(text):")
+            end = source.index("\ndef _send_admin_alert(error_text: str):", start)
+            source = source[:start] + HELPER_BLOCK + source[end:]
+        elif LEGACY_HELPER_BLOCK in source:
             source = source.replace(LEGACY_HELPER_BLOCK, HELPER_BLOCK, 1)
         else:
             raise SystemExit("พบ Tool bridge รุ่นเก่าแต่รูปแบบไม่ตรง: หยุดเพื่อความปลอดภัย")
