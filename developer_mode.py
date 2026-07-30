@@ -96,31 +96,11 @@ def _apply_operations(original: str, operations: list[dict[str, Any]]) -> str:
 
 def _request_patch(groq_client, prompt: str) -> dict[str, Any]:
     """Use a minimal strict schema and low reasoning effort for patch generation."""
-    schema = {
-        "type": "object",
-        "properties": {
-            "old_text": {"type": "string"},
-            "new_text": {"type": "string"},
-        },
-        "required": ["old_text", "new_text"],
-        "additionalProperties": False,
-    }
+    schema = {"type": "object", "properties": {"old_text": {"type": "string"}, "new_text": {"type": "string"}}, "required": ["old_text", "new_text"], "additionalProperties": False}
     res = groq_client.chat.completions.create(
         model=DEV_MODEL,
-        response_format={
-            "type": "json_schema",
-            "json_schema": {
-                "name": "single_patch",
-                "strict": True,
-                "schema": schema,
-            },
-        },
-        messages=[
-            {
-                "role": "user",
-                "content": prompt + "\nReturn exactly one JSON object with old_text and new_text."
-            }
-        ],
+        response_format={"type": "json_schema", "json_schema": {"name": "single_patch", "strict": True, "schema": schema}},
+        messages=[{"role": "user", "content": prompt + "\nReturn exactly one JSON object with old_text and new_text."}],
         reasoning_effort="low",
         temperature=0.0,
         max_tokens=1200,
@@ -134,26 +114,13 @@ def prepare_patch(text: str, groq_client=None) -> dict[str, Any]:
         return {"ok": False, "error": "ต้องระบุชื่อไฟล์ เช่น run.py"}
     if groq_client is None:
         return {"ok": False, "error": "ยังไม่ได้เชื่อมต่อ AI สำหรับสร้าง patch"}
-
     path = _safe_path(filename)
     if not path.exists():
         return {"ok": False, "error": f"ไม่พบไฟล์ {filename}"}
     original = path.read_text(encoding="utf-8")
     if len(original) > MAX_FILE_CHARS:
         return {"ok": False, "error": f"ไฟล์ใหญ่เกิน {MAX_FILE_CHARS} ตัวอักษรสำหรับ patch อัตโนมัติ"}
-
-    prompt = f"""คุณเป็น Senior Python Developer ของ Jarvis.
-แก้ไฟล์ตามคำสั่งด้วยการแทนที่ข้อความเดิมเพียง 1 จุด
-ต้องส่ง old_text เป็นข้อความที่มีอยู่จริงในไฟล์ และ new_text เป็นข้อความใหม่
-ห้ามส่งไฟล์ทั้งไฟล์
-
-ไฟล์: {filename}
-คำสั่ง: {text}
-
-เนื้อหาเดิม:
----
-{original}
----"""
+    prompt = f"""คุณเป็น Senior Python Developer ของ Jarvis.\nแก้ไฟล์ตามคำสั่งด้วยการแทนที่ข้อความเดิมเพียง 1 จุด\nต้องส่ง old_text เป็นข้อความที่มีอยู่จริงในไฟล์ และ new_text เป็นข้อความใหม่\nห้ามส่งไฟล์ทั้งไฟล์\n\nไฟล์: {filename}\nคำสั่ง: {text}\n\nเนื้อหาเดิม:\n---\n{original}\n---"""
     try:
         data = _request_patch(groq_client, prompt)
         old_text = data.get("old_text", "")
@@ -161,7 +128,6 @@ def prepare_patch(text: str, groq_client=None) -> dict[str, Any]:
         new_content = _apply_operations(original, [{"old_text": old_text, "new_text": new_text}])
     except Exception as exc:
         return {"ok": False, "error": f"สร้าง patch ไม่สำเร็จ: {exc}"}
-
     if new_content == original:
         return {"ok": False, "error": "AI ไม่ได้สร้างการเปลี่ยนแปลงใหม่"}
     if path.suffix == ".py":
@@ -169,24 +135,9 @@ def prepare_patch(text: str, groq_client=None) -> dict[str, Any]:
             ast.parse(new_content)
         except SyntaxError as exc:
             return {"ok": False, "error": f"patch ที่ AI สร้าง syntax ไม่ถูกต้อง: line {exc.lineno}: {exc.msg}"}
-
     proposal_id = uuid.uuid4().hex[:10]
-    diff = "".join(difflib.unified_diff(
-        original.splitlines(True), new_content.splitlines(True),
-        fromfile=f"a/{filename}", tofile=f"b/{filename}",
-    ))
-    session = {
-        "id": proposal_id,
-        "status": "pending",
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "file": filename,
-        "summary": f"แก้ไข {filename} ตามคำสั่ง",
-        "original": original,
-        "new_content": new_content,
-        "diff": diff,
-        "operations": [{"old_text": old_text, "new_text": new_text}],
-        "model": DEV_MODEL,
-    }
+    diff = "".join(difflib.unified_diff(original.splitlines(True), new_content.splitlines(True), fromfile=f"a/{filename}", tofile=f"b/{filename}"))
+    session = {"id": proposal_id, "status": "pending", "created_at": datetime.now(timezone.utc).isoformat(), "file": filename, "summary": f"แก้ไข {filename} ตามคำสั่ง", "original": original, "new_content": new_content, "diff": diff, "operations": [{"old_text": old_text, "new_text": new_text}], "model": DEV_MODEL}
     _save_session(session)
     return {"ok": True, "proposal_id": proposal_id, "file": filename, "summary": session["summary"], "diff": diff}
 
@@ -197,7 +148,6 @@ def approve(proposal_id: str) -> dict[str, Any]:
         return {"ok": False, "error": "ไม่พบ proposal นี้"}
     if session.get("status") != "pending":
         return {"ok": False, "error": f"proposal อยู่ในสถานะ {session.get('status')}"}
-
     path = _safe_path(session["file"])
     backup = path.with_name(path.name + f".backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
     try:
@@ -250,6 +200,30 @@ def reject(proposal_id: str) -> dict[str, Any]:
     session["status"] = "rejected"
     _save_session(session)
     return {"ok": True, "status": "rejected", "message": "ยกเลิก patch แล้ว"}
+
+
+def rollback(proposal_id: str) -> dict[str, Any]:
+    """Explicitly restore the backup from an applied/tested-uncommitted proposal."""
+    session = _load_session()
+    if not session or session.get("id") != proposal_id:
+        return {"ok": False, "error": "ไม่พบ proposal นี้"}
+    if session.get("status") not in {"applied", "tested_uncommitted", "committed"}:
+        return {"ok": False, "error": f"ไม่สามารถ rollback จากสถานะ {session.get('status')}"}
+    backup_name = session.get("backup")
+    if not backup_name:
+        return {"ok": False, "error": "ไม่พบ backup สำหรับ proposal นี้"}
+    backup = PROJECT_ROOT / backup_name
+    if not backup.exists():
+        return {"ok": False, "error": "ไม่พบไฟล์ backup แล้ว"}
+    path = _safe_path(session["file"])
+    try:
+        shutil.copy2(backup, path)
+        backup.unlink(missing_ok=True)
+        session["status"] = "rolled_back"
+        _save_session(session)
+        return {"ok": True, "status": "rolled_back", "file": session["file"], "message": "rollback เสร็จแล้ว"}
+    except Exception as exc:
+        return {"ok": False, "error": f"rollback ไม่สำเร็จ: {exc}"}
 
 
 def self_test_rollback() -> dict[str, Any]:
