@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from tools.base import BaseTool, ToolMetadata
+from tools.base import BaseTool, ToolMetadata, ToolResult
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -33,15 +33,14 @@ class GitStatusTool(BaseTool):
     )
 
     def execute(self, **params):
-        from tools.base import ToolResult
         return ToolResult(success=True, data=_git(["status", "--short"]))
 
 
 class GitCommitTool(BaseTool):
     metadata = ToolMetadata(
         name="git_commit",
-        version="1.0.0",
-        description="commit ไฟล์ที่ถูก stage แล้วด้วยข้อความที่ระบุ",
+        version="1.1.0",
+        description="stage เฉพาะ tracked changes แล้ว commit ด้วยข้อความที่ระบุ",
         category="git",
         risk_level="high",
         require_approval=True,
@@ -49,10 +48,25 @@ class GitCommitTool(BaseTool):
     )
 
     def execute(self, **params):
-        from tools.base import ToolResult
         message = str(params.get("message", "")).strip()
         if not message:
             raise ValueError("commit message is required")
+
+        # Stage only tracked modifications/deletions. Never sweep untracked
+        # data/backup files into a commit with `git add .`.
+        status = _git(["status", "--short"])
+        tracked_changes = [
+            line for line in status.splitlines()
+            if line and not (line.startswith("??") or line[0:2] == "??")
+        ]
+        if not tracked_changes:
+            raise RuntimeError("ไม่มี tracked changes ให้ commit")
+
+        _git(["add", "-u"])
+        staged = _git(["diff", "--cached", "--name-only"])
+        if not staged:
+            raise RuntimeError("ไม่มีไฟล์ถูก stage หลัง git add -u")
+
         return ToolResult(success=True, data=_git(["commit", "-m", message]))
 
 
