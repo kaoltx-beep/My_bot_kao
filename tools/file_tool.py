@@ -18,6 +18,16 @@ def _safe_path(value: str) -> Path:
     return path
 
 
+def restore_backup(backup_path: str, target_path: str) -> None:
+    backup = _safe_path(backup_path)
+    target = _safe_path(target_path)
+    if not backup.exists() or not backup.is_file():
+        raise FileNotFoundError("backup not found")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(backup, target)
+    backup.unlink(missing_ok=True)
+
+
 class FileReadTool(BaseTool):
     metadata = ToolMetadata(
         name="file_read",
