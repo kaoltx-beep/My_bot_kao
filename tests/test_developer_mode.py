@@ -42,6 +42,15 @@ class DeveloperModeTests(unittest.TestCase):
         cleaned = developer_mode._clean_model_code("```python\nprint('ok')\n```")
         self.assertEqual(cleaned, "print('ok')\n")
 
+    def test_self_test_rollback(self):
+        result = developer_mode.self_test_rollback()
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["status"], "rolled_back")
+        target = developer_mode.PROJECT_ROOT / "tests" / "_developer_auto_rollback_test.py"
+        backup = target.with_name(target.name + ".backup_test")
+        self.assertFalse(target.exists())
+        self.assertFalse(backup.exists())
+
     def _write_proposal(self, proposal):
         self.session_path.write_text(json.dumps(proposal), encoding="utf-8")
 
