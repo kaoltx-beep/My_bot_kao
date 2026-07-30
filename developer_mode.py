@@ -19,7 +19,7 @@ from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 SESSION_FILE = PROJECT_ROOT / "data" / "developer_session.json"
-MAX_FILE_CHARS = 12000
+MAX_FILE_CHARS = 20000
 PROTECTED = {".env", ".git", "config.py", "data/developer_session.json"}
 ALLOWED_EXTENSIONS = {".py", ".txt", ".md", ".json", ".sh", ".cfg", ".ini"}
 
@@ -208,7 +208,6 @@ def approve(proposal_id: str) -> dict[str, Any]:
             timeout=30,
         )
         if commit.returncode != 0:
-            # Leave the code change in place but do not pretend commit succeeded.
             session["status"] = "tested_uncommitted"
             session["commit_error"] = commit.stderr.strip() or commit.stdout.strip()
             _save_session(session)
