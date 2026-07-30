@@ -1,6 +1,5 @@
 import json
 import unittest
-from pathlib import Path
 from unittest.mock import patch
 
 import developer_mode
@@ -43,8 +42,11 @@ class DeveloperModeTests(unittest.TestCase):
         cleaned = developer_mode._clean_model_code("```python\nprint('ok')\n```")
         self.assertEqual(cleaned, "print('ok')\n")
 
-    def test_approve_applies_tests_and_commits(self):
-        proposal = {
+    def _write_proposal(self, proposal):
+        self.session_path.write_text(json.dumps(proposal), encoding="utf-8")
+
+    def test_approve_applies_and_commits(self):
+        self._write_proposal({
             "id": "abc123def4",
             "status": "pending",
             "file": "tests/_devmode_target.txt",
@@ -52,15 +54,17 @@ class DeveloperModeTests(unittest.TestCase):
             "original": "original\n",
             "new_content": "updated\n",
             "diff": "",
-        }
-        self.session_path.write_text(json.dumps(proposal), encoding="utf-8")
+        })
 
         def fake_run(args, **kwargs):
             if args[:2] == ["git", "status"]:
+                self.assertEqual(kwargs.get("cwd"), developer_mode.PROJECT_ROOT)
                 return type("Result", (), {"returncode": 0, "stdout": " M tests/_devmode_target.txt", "stderr": ""})()
             if args[:2] == ["git", "add"]:
+                self.assertEqual(kwargs.get("cwd"), developer_mode.PROJECT_ROOT)
                 return type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
             if args[:2] == ["git", "commit"]:
+                self.assertEqual(kwargs.get("cwd"), developer_mode.PROJECT_ROOT)
                 return type("Result", (), {"returncode": 0, "stdout": "[main 1234567] test commit", "stderr": ""})()
             raise AssertionError(f"unexpected subprocess call: {args}")
 
@@ -72,6 +76,37 @@ class DeveloperModeTests(unittest.TestCase):
         self.assertEqual(self.target.read_text(encoding="utf-8"), "updated\n")
         saved = json.loads(self.session_path.read_text(encoding="utf-8"))
         self.assertEqual(saved["status"], "committed")
+
+    def test_approve_marks_tested_uncommitted_when_git_commit_fails(self):
+        self._write_proposal({
+            "id": "fedcba9876",
+            "status": "pending",
+            "file": "tests/_devmode_target.txt",
+            "summary": "update without commit",
+            "original": "original\n",
+            "new_content": "updated without commit\n",
+            "diff": "",
+        })
+
+        def fake_run(args, **kwargs):
+            if args[:2] == ["git", "status"]:
+                return type("Result", (), {"returncode": 0, "stdout": " M tests/_devmode_target.txt", "stderr": ""})()
+            if args[:2] == ["git", "add"]:
+                return type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+            if args[:2] == ["git", "commit"]:
+                return type("Result", (), {"returncode": 1, "stdout": "", "stderr": "nothing to commit"})()
+            raise AssertionError(f"unexpected subprocess call: {args}")
+
+        with patch.object(developer_mode.subprocess, "run", side_effect=fake_run):
+            result = developer_mode.approve("fedcba9876")
+
+        self.assertFalse(result["ok"])
+        self.assertIn("commit ไม่สำเร็จ", result["error"])
+        self.assertEqual(self.target.read_text(encoding="utf-8"), "updated without commit\n")
+        saved = json.loads(self.session_path.read_text(encoding="utf-8"))
+        self.assertEqual(saved["status"], "tested_uncommitted")
+        self.assertIn("commit_error", saved)
+        self.assertTrue((self.target.parent / (self.target.name + ".backup_" + "" )).name.startswith(self.target.name + ".backup_"))
 
     def test_approve_rolls_back_on_syntax_failure(self):
         target = developer_mode.PROJECT_ROOT / "tests" / "_devmode_target.py"
