@@ -25,6 +25,8 @@ _DEV_KEYWORDS = (
     "/status",
     "ทดสอบ rollback",
     "ทดสอบโรลแบ็ก",
+    "rollback",
+    "โรลแบ็ก",
 )
 
 
@@ -77,7 +79,7 @@ def _result_for_run(result: dict) -> dict:
 
         return {"files": [{"status": "ok", "file": result.get("message", "สำเร็จ"), "lines": 1}]}
 
-    return {"files": [{"status": "error", "file": "Developer Mode", "errors": [result.get("error", "เกิดข้อผิดพลาด")]}]}
+    return {"files": [{"status": "error", "file": "Developer Mode", "errors": [result.get("error", "เกิดข้อผิดพลาด")] }]}
 
 
 def _get_groq_client(groq_client=None):
@@ -133,7 +135,10 @@ def execute_developer_command(text: str, root=".", groq_client=None):
         )
         return {"files": [{"status": "ok", "file": summary, "lines": 1}]}
 
-    if normalized in ("ทดสอบ rollback", "ทดสอบโรลแบ็ก", "test rollback"):
+    if normalized in ("ทดสอบ rollback", "ทดสอบโรลแบ็ก", "test rollback", "/rollback", "/rollback-test"):
+        return _result_for_run(developer_mode.self_test_rollback())
+
+    if "rollback" in normalized or "โรลแบ็ก" in normalized:
         return _result_for_run(developer_mode.self_test_rollback())
 
     if normalized.startswith("ดำเนินการ"):
