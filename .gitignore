@@ -15,6 +15,7 @@ __pycache__/
 *.db-wal
 *.sqlite
 *.sqlite3
+/data/
 
 # ─── Log files ──────────────────────────────────────────────────────────────
 *.log
@@ -29,6 +30,8 @@ logs/
 *.error
 *.old
 *.youtube_working
+run.py.toolbridge_backup_*
+run.py.approval_backup_*
 
 # ─── Binary / media assets ──────────────────────────────────────────────────
 *.mp3
@@ -36,7 +39,7 @@ logs/
 *.ogg
 jarvis
 
-# ─── Google / OAuth credentials ─────────────────────────────────────────────
+# ─── Google / OAuth credentials ──────────────────────────────────────────────
 service_account.json
 credentials/
 credentials.json
@@ -53,6 +56,6 @@ Thumbs.db
 .vscode/
 .idea/
 
-# ─── Build artifacts ────────────────────────────────────────────────────────
+# ─── Build artifacts ─────────────────────────────────────────────────────────
 dist/
 build/
