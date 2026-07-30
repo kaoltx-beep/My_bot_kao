@@ -21,6 +21,10 @@ _DEV_KEYWORDS = (
     "ยกเลิก patch",
     "ยกเลิกแพตช์",
     "ดำเนินการ",
+    "สถานะระบบ",
+    "/status",
+    "ทดสอบ rollback",
+    "ทดสอบโรลแบ็ก",
 )
 
 
@@ -40,9 +44,12 @@ def _result_for_run(result: dict) -> dict:
             file_name = result.get("file") or result.get("details") or "ไฟล์ที่แก้ไข"
             return {"files": [{"status": "ok", "file": f"✅ แก้ไข → ทดสอบ → commit สำเร็จ\n📝 {file_name}", "lines": 1}]}
         if status == "rolled_back":
-            return {"files": [{"status": "error", "file": "Developer Mode", "errors": ["แก้ไขไม่ผ่าน จึง rollback กลับเป็นไฟล์เดิมแล้ว"]}]}
+            message = result.get("message") or "แก้ไขไม่ผ่าน จึง rollback กลับเป็นไฟล์เดิมแล้ว"
+            return {"files": [{"status": "ok", "file": f"✅ {message}", "lines": 1}]}
         if status == "tested_uncommitted":
             return {"files": [{"status": "error", "file": result.get("file", "Developer Mode"), "errors": ["แก้ไขและทดสอบผ่านแล้ว แต่ commit ไม่สำเร็จ"]}]}
+        if status == "rejected":
+            return {"files": [{"status": "ok", "file": "✅ ยกเลิก patch แล้ว", "lines": 1}]}
 
         proposal_id = result.get("proposal_id")
         if proposal_id:
@@ -84,12 +91,7 @@ def _get_groq_client(groq_client=None):
 
 
 def _execute_auto(text: str, groq_client=None):
-    """Run Developer Mode end-to-end without a manual approval step.
-
-    Supported forms:
-      - 'ดำเนินการ' -> approve the current pending proposal.
-      - 'ดำเนินการ แก้ไฟล์ run.py ...' -> create, test and commit automatically.
-    """
+    """Run Developer Mode end-to-end without a manual approval step."""
     normalized = (text or "").strip()
     remainder = re.sub(r"^ดำเนินการ\s*", "", normalized, count=1).strip()
 
@@ -118,6 +120,21 @@ def _execute_auto(text: str, groq_client=None):
 
 def execute_developer_command(text: str, root=".", groq_client=None):
     normalized = (text or "").lower().strip()
+
+    if normalized in ("สถานะระบบ", "/status", "status"):
+        status = developer_mode.system_status()
+        summary = (
+            "🤖 Jarvis: ONLINE\n"
+            f"🛠 Developer Mode: {status['developer_mode'].upper()}\n"
+            f"🌿 Branch: {status['branch']}\n"
+            f"🧠 Model: {status['model']}\n"
+            f"📦 Max file: {status['max_file_chars']} chars\n"
+            f"⏳ Pending: {status['pending_proposal'] or 'none'}"
+        )
+        return {"files": [{"status": "ok", "file": summary, "lines": 1}]}
+
+    if normalized in ("ทดสอบ rollback", "ทดสอบโรลแบ็ก", "test rollback"):
+        return _result_for_run(developer_mode.self_test_rollback())
 
     if normalized.startswith("ดำเนินการ"):
         return _execute_auto(text, groq_client=groq_client)
