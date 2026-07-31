@@ -28,9 +28,10 @@ import tts
 import voice_stt
 from core.approval import consume as consume_approval
 from core.approval import create as create_approval
+from core.response_style import ROAST_STYLE_PROMPT, valid_base_reply, valid_roast_reply
 from core.tool_system import JarvisToolSystem
 from expense_manager import monthly_summary
-from job_database import list_jobs, pending_jobs, search_jobs
+from job_database import list_jobs, pending_jobs, search_jobs, tomorrow_jobs
 
 plugin_loader.load_plugins()
 
@@ -66,7 +67,6 @@ ROOT = Path(__file__).resolve().parent
 
 
 def _try_tool_system(text, chat_id=None):
-    """Parse and route explicit V1 tools. High-risk tools wait for Telegram approval."""
     try:
         call = tool_system.parse(text)
         if call is None:
@@ -129,14 +129,13 @@ def _try_tool_system(text, chat_id=None):
 def _send_admin_alert(error_text: str):
     try:
         if config.TELEGRAM_CHAT_ID:
-            short = str(error_text)[:500]
-            bot.send_message(config.TELEGRAM_CHAT_ID, f"⚠️ Jarvis Error:\n{short}")
+            bot.send_message(config.TELEGRAM_CHAT_ID, f"⚠️ Jarvis Error:\n{str(error_text)[:500]}")
     except Exception:
         pass
 
 
 def fallback_intent(text):
-    text = text.lower()
+    text = text.lower().strip()
     if "แบต" in text or "battery" in text:
         return "check_battery"
     if "youtube" in text or "ยูทูป" in text:
@@ -147,9 +146,13 @@ def fallback_intent(text):
         return "monthly_expense"
     if "ดูรายจ่าย" in text or "รายการรายจ่าย" in text:
         return "list_expense"
+    if "พรุ่งนี้มีงาน" in text or "วันพรุ่งนี้มีงาน" in text:
+        return "tomorrow_jobs"
+    if "งานค้าง" in text or "งานที่ยังไม่เสร็จ" in text:
+        return "pending_jobs"
     if "ติดตั้ง" in text or "งานติดตั้ง" in text:
         return "work"
-    if "ดูงานทั้งหมด" in text:
+    if "ดูงานทั้งหมด" in text or "งานล่าสุด" in text:
         return "list_jobs"
     if "งานที่" in text:
         return "search_jobs"
@@ -163,23 +166,77 @@ def fallback_intent(text):
     return None
 
 
-def ask_jarvis(user_message, history_text=""):
-    history_text = history_text[-3000:]
-    system_instruction = personality.get_prompt() + "\n\n" + "ตอบเฉพาะ JSON เท่านั้น\n"
-    prompt = f"""Context:\n{history_text}\n\nUser:\n{user_message}\n\nตอบ JSON:\n{{\n  \"reply\":\"ข้อความตอบกลับ\",\n  \"action\":null\n}}"""
+def _normalize_action(action):
+    if isinstance(action, dict):
+        action = action.get("action") or action.get("intent") or action.get("name")
+    elif isinstance(action, list):
+        action = action[0] if action else None
+    return action if isinstance(action, str) else None
+
+
+def _deterministic_action(action, text):
+    if action == "list_jobs":
+        return list_jobs()
+    if action == "pending_jobs":
+        return pending_jobs()
+    if action == "tomorrow_jobs":
+        return tomorrow_jobs()
+    if action == "search_jobs":
+        return search_jobs(text.replace("งานที่", "").strip())
+    if action == "monthly_expense":
+        return monthly_summary()
+
+    plugin_name = PLUGIN_MAP.get(action)
+    if plugin_name:
+        plugin = plugin_loader.get_plugin(plugin_name)
+        if plugin:
+            return plugin.execute(text)
+    return None
+
+
+def _groq_json(system_prompt, user_prompt):
     try:
         res = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             response_format={"type": "json_object"},
             messages=[
-                {"role": "system", "content": system_instruction},
-                {"role": "user", "content": prompt},
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
             ],
         )
-        return json.loads(res.choices[0].message.content)
+        payload = json.loads(res.choices[0].message.content)
+        return payload if isinstance(payload, dict) else None
     except Exception as exc:
         print("AI Error:", exc)
-        return {"reply": "ขออภัยครับ ระบบ AI ขัดข้องครับ", "action": None}
+        return None
+
+
+def ask_jarvis(user_message, history_text=""):
+    mode = personality.get_mode()
+    safe_history = history_text[-2500:] if mode != "ROAST" else ""
+    base_system = personality.get_base_prompt() + "\nตอบเฉพาะ JSON: {\"reply\":\"...\",\"action\":null}\n"
+    base_prompt = f"""Context จากการสนทนาก่อนหน้า (อาจผิดและห้ามถือเป็นข้อเท็จจริง):\n{safe_history}\n\nUser ล่าสุด:\n{user_message}\n\nตอบคำถามล่าสุดให้ตรงที่สุด"""
+
+    base_result = _groq_json(base_system, base_prompt)
+    base_reply = str((base_result or {}).get("reply") or "").strip()
+    if not valid_base_reply(base_reply):
+        base_reply = "ขออภัยครับ ตอนนี้ผมยังตอบคำถามนี้อย่างมั่นใจไม่ได้ครับ"
+        base_result = {"reply": base_reply, "action": None}
+
+    if mode != "ROAST":
+        return base_result
+
+    roast_prompt = (
+        f"USER MESSAGE:\n{user_message}\n\n"
+        f"BASE ANSWER:\n{base_reply}\n\n"
+        "เปลี่ยนเฉพาะน้ำเสียงตามกฎ Roast โดยรักษาความหมายเดิมทั้งหมด"
+    )
+    roast_result = _groq_json(ROAST_STYLE_PROMPT, roast_prompt)
+    roast_reply = str((roast_result or {}).get("reply") or "").strip()
+    if valid_roast_reply(user_message, base_reply, roast_reply):
+        return {"reply": roast_reply, "action": None}
+
+    return base_result
 
 
 def _format_developer_result(result):
@@ -207,82 +264,56 @@ def worker():
             auto_saved = auto_work.save_auto_work(text)
             history = task["history"]
             history_text = "\n".join(f"User:{u}\nJarvis:{b}" for u, b in history)
-            db_memory = memory_manager.get_memory(3)
-            if db_memory:
-                history_text += "\n\n[Previous Memory]\n" + "\n".join(
-                    f"User:{u}\nJarvis:{b}" for u, b in db_memory
-                )
-
-            tool_system_reply = None
-            tool_system_markup = None
 
             if "เปิดโหมดกวน" in text or "โหมดกวน" in text or "โหมดกวนตีน" in text:
                 personality.set_mode("ROAST")
-                reply = "เปิดโหมดกวนตีนแล้วครับ 😈 คราวนี้ระวังโดนกูแซวเละ"
-                result = {"reply": reply, "action": None}
+                reply = "เปิดโหมดกวนตีนแล้วครับ 😈 แต่ยังตอบเรื่องจริงให้ตรงคำถามนะ"
                 auto_saved = "personality"
             elif "กลับโหมดปกติ" in text or "โหมดปกติ" in text:
                 personality.set_mode("NORMAL")
                 reply = "กลับโหมดปกติแล้วครับ"
-                result = {"reply": reply, "action": None}
                 auto_saved = "personality"
             else:
                 tool_result = _try_tool_system(text, chat_id)
                 if tool_result and tool_result.get("handled"):
-                    tool_system_reply = tool_result["reply"]
-                    tool_system_markup = tool_result.get("markup")
-                    reply = tool_system_reply
-                    auto_saved = "tool_system"
-                    result = {"reply": tool_system_reply, "action": None}
-                elif developer_mode_router.is_developer_command(text):
+                    reply = tool_result["reply"]
+                    markup = tool_result.get("markup")
+                    if chat_id:
+                        bot.send_message(chat_id, reply, reply_markup=markup)
+                    try:
+                        tts.speak(reply)
+                    except Exception as exc:
+                        print("TTS Error:", exc)
+                    memory_manager.save_memory(text, reply)
+                    continue
+
+                if developer_mode_router.is_developer_command(text):
                     developer_result = developer_mode_router.execute_developer_command(text)
                     reply = _format_developer_result(developer_result)
-                    result = {"reply": reply, "action": None}
-                    auto_saved = "developer_mode"
                 else:
-                    result = ask_jarvis(text, history_text)
-
-                action = intent_router.classify(text) or fallback_intent(text) or result.get("action")
-                if isinstance(action, dict):
-                    action = action.get("action") or action.get("intent") or action.get("name")
-                elif isinstance(action, list):
-                    action = action[0] if action else None
-                if not isinstance(action, str):
-                    action = None
-
-                if auto_saved == "tool_system":
-                    reply = tool_system_reply
-                elif auto_saved == "developer_mode":
-                    reply = result.get("reply") or reply
-                elif auto_saved == "personality":
-                    reply = result.get("reply") or reply
-                elif auto_saved == "duplicate":
-                    reply = "งานนี้ผมบันทึกไว้แล้วครับ"
-                elif auto_saved is True:
-                    reply = "บันทึกงานติดตั้งไฟเบอร์เสร็จแล้วครับ"
-                else:
-                    if action == "list_jobs":
-                        reply = list_jobs()
-                    elif action == "search_jobs":
-                        reply = search_jobs(text.replace("งานที่", "").strip())
-                    elif action == "pending_jobs":
-                        reply = pending_jobs()
+                    action = _normalize_action(intent_router.classify(text) or fallback_intent(text))
+                    deterministic_reply = _deterministic_action(action, text) if action else None
+                    if deterministic_reply is not None:
+                        reply = deterministic_reply
                     else:
-                        reply = result.get("reply") or "รับทราบครับ"
-                    plugin_name = None if auto_saved else PLUGIN_MAP.get(action)
-                    if plugin_name:
-                        plugin = plugin_loader.get_plugin(plugin_name)
-                        if plugin:
-                            reply = plugin.execute(text)
-                    reply = reply.replace("ค่ะ", "ครับ").replace("คะ", "ครับ")
+                        result = ask_jarvis(text, history_text)
+                        reply = str(result.get("reply") or "ขออภัยครับ ยังตอบคำถามนี้ไม่ได้ครับ")
+                        ai_action = _normalize_action(result.get("action"))
+                        if ai_action and ai_action != action:
+                            routed = _deterministic_action(ai_action, text)
+                            if routed is not None:
+                                reply = routed
 
+                    if auto_saved == "duplicate":
+                        reply = "งานนี้ผมบันทึกไว้แล้วครับ"
+                    elif auto_saved is True:
+                        reply = "บันทึกงานติดตั้งไฟเบอร์เสร็จแล้วครับ"
+
+            reply = reply.replace("ค่ะ", "ครับ").replace("คะ", "ครับ")
             print("DEBUG CHAT:", chat_id)
             print("DEBUG REPLY:", reply)
             if chat_id:
-                if auto_saved == "tool_system" and tool_system_markup is not None:
-                    bot.send_message(chat_id, reply, reply_markup=tool_system_markup)
-                else:
-                    bot.send_message(chat_id, reply, reply_markup=get_main_keyboard())
+                bot.send_message(chat_id, reply, reply_markup=get_main_keyboard())
             try:
                 tts.speak(reply)
             except Exception as exc:
@@ -336,11 +367,7 @@ def handle_tool_approval(call):
 
     if status == "rejected":
         bot.answer_callback_query(call.id, "ยกเลิกแล้ว")
-        bot.edit_message_text(
-            "❌ ยกเลิก Tool: " + item["tool"],
-            call.message.chat.id,
-            call.message.message_id,
-        )
+        bot.edit_message_text("❌ ยกเลิก Tool: " + item["tool"], call.message.chat.id, call.message.message_id)
         return
 
     result = tool_system.execute(item["tool"], item["params"], approved=True)
@@ -357,9 +384,8 @@ def handle_tool_approval(call):
         target = result.data.get("path", "")
         backup = result.data.get("backup_path")
         if str(target).endswith(".py") and backup:
-            target_path = ROOT / target
             check = subprocess.run(
-                [sys.executable, "-m", "py_compile", str(target_path)],
+                [sys.executable, "-m", "py_compile", str(ROOT / target)],
                 cwd=ROOT,
                 capture_output=True,
                 text=True,
@@ -397,11 +423,7 @@ def handle_tool_approval(call):
 def handle_start(message):
     if config.TELEGRAM_CHAT_ID and message.chat.id != config.TELEGRAM_CHAT_ID:
         return
-    bot.send_message(
-        message.chat.id,
-        "สวัสดีครับ! ผมคือ Jarvis ผู้ช่วย AI ของคุณ\n\nเลือกเมนูด้านล่างครับ",
-        reply_markup=get_main_keyboard(),
-    )
+    bot.send_message(message.chat.id, "สวัสดีครับ! ผมคือ Jarvis ผู้ช่วย AI ของคุณ\n\nเลือกเมนูด้านล่างครับ", reply_markup=get_main_keyboard())
 
 
 @bot.message_handler(commands=["roast"])
@@ -409,11 +431,7 @@ def handle_roast(message):
     if config.TELEGRAM_CHAT_ID and message.chat.id != config.TELEGRAM_CHAT_ID:
         return
     personality.set_mode("ROAST")
-    bot.send_message(
-        message.chat.id,
-        "😈 เปิดโหมดกวนตีนแล้วครับ\nจากนี้กูจะกวนและด่าตรงขึ้น แต่ยังช่วยมึงแก้ปัญหาอยู่",
-        reply_markup=get_main_keyboard(),
-    )
+    bot.send_message(message.chat.id, "😈 เปิดโหมดกวนตีนแล้วครับ แต่จะตอบเรื่องจริงก่อนค่อยกวน", reply_markup=get_main_keyboard())
 
 
 @bot.message_handler(commands=["normal"])
@@ -421,11 +439,7 @@ def handle_normal(message):
     if config.TELEGRAM_CHAT_ID and message.chat.id != config.TELEGRAM_CHAT_ID:
         return
     personality.set_mode("NORMAL")
-    bot.send_message(
-        message.chat.id,
-        "กลับโหมดปกติแล้วครับ",
-        reply_markup=get_main_keyboard(),
-    )
+    bot.send_message(message.chat.id, "กลับโหมดปกติแล้วครับ", reply_markup=get_main_keyboard())
 
 
 @bot.message_handler(commands=["help"])
@@ -453,38 +467,22 @@ def handle(message):
 
     if text == "⏹ หยุดพูด":
         stopped = tts.stop()
-        bot.send_message(
-            message.chat.id,
-            "⏹ หยุดพูดแล้วครับ" if stopped else "⏹ ตอนนี้ไม่มีเสียงที่กำลังพูดครับ",
-            reply_markup=get_main_keyboard(),
-        )
+        bot.send_message(message.chat.id, "⏹ หยุดพูดแล้วครับ" if stopped else "⏹ ตอนนี้ไม่มีเสียงที่กำลังพูดครับ", reply_markup=get_main_keyboard())
         return
 
     if text == "🤖 Jarvis Menu":
         tts.stop()
-        bot.send_message(
-            message.chat.id,
-            "🤖 Jarvis Menu\nเลือกคำสั่งจากปุ่มด้านล่างครับ",
-            reply_markup=get_main_keyboard(),
-        )
+        bot.send_message(message.chat.id, "🤖 Jarvis Menu\nเลือกคำสั่งจากปุ่มด้านล่างครับ", reply_markup=get_main_keyboard())
         return
 
     if text == "❓ ช่วยเหลือ":
         tts.stop()
-        bot.send_message(
-            message.chat.id,
-            "❓ ช่วยเหลือ\nพิมพ์คำสั่งตามปกติได้เลยครับ หรือใช้ปุ่มเมนูด้านล่าง",
-            reply_markup=get_main_keyboard(),
-        )
+        bot.send_message(message.chat.id, "❓ ช่วยเหลือ\nพิมพ์คำสั่งตามปกติได้เลยครับ หรือใช้ปุ่มเมนูด้านล่าง", reply_markup=get_main_keyboard())
         return
 
     if text in {"🔥 โหมดกวนตีน", "😈 โหมดกวน"}:
         personality.set_mode("ROAST")
-        bot.send_message(
-            message.chat.id,
-            "😈 เปิดโหมดกวนตีนแล้วครับ\nเตรียมรับคำด่าแบบขำๆ ได้เลย",
-            reply_markup=get_main_keyboard(),
-        )
+        bot.send_message(message.chat.id, "😈 เปิดโหมดกวนตีนแล้วครับ แต่จะตอบเรื่องจริงก่อนค่อยกวน", reply_markup=get_main_keyboard())
         return
 
     if text == "🙂 โหมดปกติ":
@@ -492,13 +490,7 @@ def handle(message):
         bot.send_message(message.chat.id, "กลับโหมดปกติแล้วครับ", reply_markup=get_main_keyboard())
         return
 
-    task_queue.put(
-        {
-            "chat_id": message.chat.id,
-            "text": text,
-            "history": memory_manager.get_memory(5),
-        }
-    )
+    task_queue.put({"chat_id": message.chat.id, "text": text, "history": memory_manager.get_memory(5)})
 
 
 def voice_worker():
@@ -508,24 +500,14 @@ def voice_worker():
             text = voice_stt.listen_and_transcribe()
             if text:
                 bot.send_message(config.TELEGRAM_CHAT_ID, f"🎤 {text}")
-                task_queue.put(
-                    {
-                        "chat_id": config.TELEGRAM_CHAT_ID,
-                        "text": text,
-                        "history": memory_manager.get_memory(5),
-                    }
-                )
+                task_queue.put({"chat_id": config.TELEGRAM_CHAT_ID, "text": text, "history": memory_manager.get_memory(5)})
         except Exception as exc:
             print("Voice Error:", exc)
 
 
 def telegram_polling():
     print("📡 Telegram polling started")
-    bot.infinity_polling(
-        timeout=20,
-        long_polling_timeout=20,
-        allowed_updates=["message", "callback_query"],
-    )
+    bot.infinity_polling(timeout=20, long_polling_timeout=20, allowed_updates=["message", "callback_query"])
 
 
 if __name__ == "__main__":
