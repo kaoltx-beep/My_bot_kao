@@ -1,1 +1,0 @@
-Roast Mode V2 architecture: route deterministic system requests first; produce a factual base AI answer for general conversation; optionally apply Roast style as a separate transformation; validate the styled answer and fall back to the factual base answer if validation fails. Personality owns only persistent mode state and prompts and never monkey-patches runtime functions.
