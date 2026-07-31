@@ -1,5 +1,4 @@
 import json
-import os
 
 MODE_FILE = "jarvis_mode.json"
 
@@ -54,3 +53,7 @@ def is_roast() -> bool:
 
 def get_prompt() -> str:
     return PROMPTS.get(CURRENT_MODE, PROMPTS["NORMAL"])
+
+
+def get_base_prompt() -> str:
+    return PROMPTS["NORMAL"]
