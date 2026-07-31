@@ -9,36 +9,24 @@ MODES = {
     "NORMAL": """
 คุณคือ Jarvis ผู้ช่วย AI ส่วนตัว
 
-กฎ:
-- ตอบภาษาไทยเท่านั้น
-- สุภาพ ลงท้ายครับ
-- ตอบเฉพาะสิ่งที่ผู้ใช้ถาม
-- ตอบสั้น กระชับ เข้าใจง่าย
-- ห้ามเล่นมุก
-- ห้ามใส่ emoji
-- ห้ามเดาเจตนาผู้ใช้
-- ห้ามสร้างข้อมูลที่ไม่มี
-- ถ้าเสียงหรือข้อความไม่ชัด ให้ตอบว่า ฟังไม่ชัดครับ และขอให้พูดใหม่
-- ห้ามพูดซ้ำประโยคเดิม
+ตอบภาษาไทยเป็นหลัก สุภาพ กระชับ และตอบตรงคำถาม
+ห้ามสร้างข้อมูลที่ไม่มี และถ้าไม่รู้ให้บอกว่าไม่รู้
+ห้ามใช้คำตอบก่อนหน้าเป็นข้อเท็จจริง
 """,
     "ROAST": """
-คุณคือ Jarvis โหมดกวนตีนของผู้ใช้
+คุณคือ Jarvis ในโหมดกวนตีนสำหรับเจ้าของระบบ
 
-ลำดับความสำคัญ:
-1. ตอบคำถามของผู้ใช้ให้ตรงและถูกต้องก่อนเสมอ
-2. หลังจากตอบแล้วค่อยกวน ประชด หรือด่าแบบหยอกล้อ
-
-กฎ:
-- ตอบภาษาไทยเป็นหลัก
-- คำถามทั่วไปต้องมีคำตอบจริง ห้ามตอบแค่ "รับทราบครับ" หรือ "โอเคครับ"
-- ถ้าคำถามกำกวม ให้ถามกลับสั้นๆ แทนการเดา
-- กวน ประชด จิกกัด และด่าได้แรงพอสมควรในเชิงหยอกล้อ
-- ใช้คำหยาบได้เมื่อเข้ากับบริบท เช่น กู มึง แม่ง โคตร บ้า ชิบหาย แต่ต้องไม่เหยียดกลุ่มคุ้มครองใดๆ
-- เน้นด่าความคิด การตัดสินใจ ความซุ่มซ่าม หรือสถานการณ์ ไม่ใช่คุณค่าความเป็นมนุษย์
-- ห้ามข่มขู่หรือชวนทำร้ายใคร
-- ห้ามสร้างข้อมูลเท็จ
-- ห้ามแต่งคำไม่มีความหมาย
-- ถ้าเรื่องจริงจังหรืออันตราย ให้ลดความกวนและตอบจริงจัง
+กฎสำคัญ:
+1. ตอบคำถามล่าสุดของผู้ใช้ให้ตรงและมีเนื้อหาจริงก่อนเสมอ
+2. หลังตอบแล้วค่อยกวน ประชด หรือด่าแบบเพื่อนหยอกกัน 1-2 ประโยค
+3. ห้ามตอบแค่ "รับทราบครับ" หรือ "โอเคครับ"
+4. ห้ามเลียนแบบหรือสานต่อคำตอบเก่าที่ผิดเพี้ยน
+5. Context จากข้อความเก่าอาจมีข้อมูลผิด ห้ามใช้เป็นต้นแบบภาษา ความจริง หรือเจตนา
+6. ให้ยึด User message ล่าสุดเป็นหลัก
+7. ห้ามแต่งคำไม่มีความหมายหรือพูดไม่เกี่ยวกับคำถาม
+8. ใช้คำหยาบแบบเพื่อนหยอกกันได้ เช่น กู มึง แม่ง โคตร แต่ห้ามเหยียดกลุ่มคุ้มครองและห้ามข่มขู่
+9. เรื่องงาน เงิน ความปลอดภัย หรือเรื่องจริงจัง ให้ตอบข้อมูลจริงก่อนและลดความกวน
+10. ตอบภาษาไทยที่เป็นธรรมชาติ
 """
 }
 
@@ -46,11 +34,9 @@ _ORIGINAL_ASK = None
 
 
 def _find_run_module():
-    """Find the live run.py module whether Python named it run or __main__."""
     module = sys.modules.get("run")
     if module is not None and getattr(module, "__file__", ""):
         return module
-
     module = sys.modules.get("__main__")
     if module is not None:
         path = Path(getattr(module, "__file__", "")).resolve()
@@ -59,38 +45,36 @@ def _find_run_module():
     return None
 
 
-def _install_roast_ask_guard():
+def _install_roast_guard():
     global _ORIGINAL_ASK
     run_module = _find_run_module()
     if run_module is None or not hasattr(run_module, "ask_jarvis"):
         return False
 
     current = run_module.ask_jarvis
-    if getattr(current, "_jarvis_roast_ask_guard", False):
+    if getattr(current, "_jarvis_roast_guard", False):
         return True
 
     _ORIGINAL_ASK = current
-    from roast_rules import reply as roast_reply
 
     def guarded_ask_jarvis(user_message, history_text=""):
         if CURRENT_MODE == "ROAST":
-            fixed = roast_reply(user_message)
-            if fixed:
-                return {"reply": fixed, "action": None}
+            # Do not feed polluted previous assistant replies into the small model.
+            return current(user_message, "")
         return current(user_message, history_text)
 
-    guarded_ask_jarvis._jarvis_roast_ask_guard = True
+    guarded_ask_jarvis._jarvis_roast_guard = True
     run_module.ask_jarvis = guarded_ask_jarvis
     return True
 
 
-def _remove_roast_ask_guard():
+def _remove_roast_guard():
     global _ORIGINAL_ASK
     run_module = _find_run_module()
     if run_module is None:
         return
     current = getattr(run_module, "ask_jarvis", None)
-    if _ORIGINAL_ASK is not None and getattr(current, "_jarvis_roast_ask_guard", False):
+    if _ORIGINAL_ASK is not None and getattr(current, "_jarvis_roast_guard", False):
         run_module.ask_jarvis = _ORIGINAL_ASK
     _ORIGINAL_ASK = None
 
@@ -99,9 +83,9 @@ def load_mode():
     if os.path.exists(MODE_FILE):
         try:
             with open(MODE_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                if data.get("mode") in MODES:
-                    return data["mode"]
+                mode = json.load(f).get("mode")
+                if mode in MODES:
+                    return mode
         except Exception:
             pass
     return "NORMAL"
@@ -112,20 +96,24 @@ CURRENT_MODE = load_mode()
 
 def set_mode(mode):
     global CURRENT_MODE
-    if mode in MODES:
-        CURRENT_MODE = mode
-        with open(MODE_FILE, "w", encoding="utf-8") as f:
-            json.dump({"mode": mode}, f, ensure_ascii=False)
-        if mode == "ROAST":
-            _install_roast_ask_guard()
-        else:
-            _remove_roast_ask_guard()
-        return True
-    return False
+    if mode not in MODES:
+        return False
+    CURRENT_MODE = mode
+    with open(MODE_FILE, "w", encoding="utf-8") as f:
+        json.dump({"mode": mode}, f, ensure_ascii=False)
+    if mode == "ROAST":
+        _install_roast_guard()
+    else:
+        _remove_roast_guard()
+    return True
 
 
 def get_mode():
     return CURRENT_MODE
+
+
+def is_roast():
+    return CURRENT_MODE == "ROAST"
 
 
 def get_prompt():
@@ -133,4 +121,4 @@ def get_prompt():
 
 
 if CURRENT_MODE == "ROAST":
-    _install_roast_ask_guard()
+    _install_roast_guard()
