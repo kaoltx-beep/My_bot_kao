@@ -1,3 +1,4 @@
+import os
 import json
 import logging
 import os
@@ -517,4 +518,4 @@ if __name__ == "__main__":
     if os.getenv("VOICE_MODE_ENABLED", "0") == "1":
         threading.Thread(target=voice_worker, daemon=True).start()
     threading.Thread(target=reminder_worker.run, daemon=True).start()
-    uvicorn.run("run:app", host="127.0.0.1", port=8000, reload=False)
+    uvicorn.run("run:app", host="0.0.0.0", port=int(os.environ.get("PORT", 8000)), reload=False)
