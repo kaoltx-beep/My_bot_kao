@@ -47,6 +47,19 @@ def start_telegram_polling_if_enabled():
 
         bot = telebot.TeleBot(token)
 
+        # Register handlers from handlers.py
+        try:
+            from handlers import register_handlers
+            # instantiate tool system if available
+            try:
+                from core.tool_system import JarvisToolSystem
+                tool_system = JarvisToolSystem()
+            except Exception:
+                tool_system = None
+            register_handlers(bot, tool_system=tool_system)
+        except Exception as exc:
+            print("Warning: failed to import/register handlers:", exc)
+
         def _poll():
             try:
                 print("📡 Telegram polling started")
