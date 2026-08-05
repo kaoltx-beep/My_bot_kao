@@ -49,6 +49,10 @@ PLUGIN_MAP = {
 _DASHBOARD_TOKEN = os.getenv("DASHBOARD_TOKEN", "")
 app = FastAPI()
 
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
 
 def _check_dashboard_auth(x_dashboard_token: str = Header(default=None)):
     if _DASHBOARD_TOKEN and x_dashboard_token != _DASHBOARD_TOKEN:
