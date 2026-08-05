@@ -3,6 +3,22 @@ import work_logger
 
 PLUGIN_NAME = "task"
 
+METADATA = {
+    "name": "task",
+    "description": "จัดการงานและบันทึกงานติดตั้ง",
+    "keywords": [
+        "งาน",
+        "บันทึกงาน",
+        "เพิ่มงาน",
+        "ดูงาน",
+        "รายการงาน",
+        "ติดตั้ง",
+        "fiber",
+        "3bb",
+        "ais"
+    ]
+}
+
 
 def execute(text=None):
     if not text:

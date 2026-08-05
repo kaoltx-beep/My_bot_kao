@@ -3,6 +3,19 @@ import reminder_manager
 
 PLUGIN_NAME = "reminder"
 
+METADATA = {
+    "name": "reminder",
+    "description": "ตั้งและดูการเตือนความจำ",
+    "keywords": [
+        "เตือน",
+        "ตั้งเตือน",
+        "ดูเตือน",
+        "รายการเตือน",
+        "รายการเตือน",
+        "reminder"
+    ]
+}
+
 
 def execute(text=None):
     if not text:

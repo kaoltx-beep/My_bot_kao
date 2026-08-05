@@ -3,16 +3,24 @@ import plugin_loader
 
 def find_plugin(text):
     text = text.lower()
-
     plugins = plugin_loader.PLUGINS
 
     for name, plugin in plugins.items():
-        if hasattr(plugin, "METADATA"):
-            keywords = plugin.METADATA.get("keywords", [])
+        plugin_key = name.lower()
 
-            for keyword in keywords:
-                if keyword.lower() in text:
-                    return name
+        if plugin_key and plugin_key in text:
+            return name
+
+        keywords = []
+        if hasattr(plugin, "METADATA"):
+            keywords.extend(plugin.METADATA.get("keywords", []))
+
+        if hasattr(plugin, "PLUGIN_NAME"):
+            keywords.append(plugin.PLUGIN_NAME)
+
+        for keyword in keywords:
+            if keyword and keyword.lower() in text:
+                return name
 
     return None
 

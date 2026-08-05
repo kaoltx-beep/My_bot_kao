@@ -2,7 +2,14 @@ from work_logger import save_install_job
 
 METADATA = {
     "name": "work",
-    "description": "บันทึกงานติดตั้งลง Google Sheets"
+    "description": "บันทึกงานติดตั้งลง Google Sheets",
+    "keywords": [
+        "บันทึกงานติดตั้ง",
+        "งานติดตั้ง",
+        "ติดตั้ง",
+        "google sheets",
+        "save install"
+    ]
 }
 
 def execute(context):

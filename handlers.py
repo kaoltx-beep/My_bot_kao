@@ -63,17 +63,28 @@ def register_handlers(bot, tool_system=None):
                     except Exception as exc:
                         reply = f"Developer Mode error: {exc}"
                 else:
-                    # Plugin routing
-                    plugin_name = plugin_router.find_plugin(text)
-                    reply = None
-                    if plugin_name:
-                        plugin = plugin_loader.get_plugin(plugin_name)
-                        if plugin:
-                            try:
-                                # plugin.execute may accept text/context
-                                reply = plugin.execute(text)
-                            except Exception as exc:
-                                reply = f"Plugin {plugin_name} error: {exc}"
+                    # Friendly greetings and support phrases
+                    normalized = text.strip().lower()
+                    if any(greeting in normalized for greeting in ["สวัสดี", "หวัดดี", "hello", "hi", "hey", "สบายดี", "ดีไหม"]):
+                       reply = "สวัสดีครับ! มีอะไรให้ Jarvis ช่วยได้บ้างครับ?"
+                    elif any(menu_word in normalized for menu_word in ["เมนู", "menu", "jarvis menu", "ช่วยอะไร", "คำสั่ง", "ทำอะไรได้"]):
+                       plugin_info = plugin_loader.get_plugin_info()
+                       if plugin_info:
+                          plugin_list = [f"{name}: {meta.get('description', '')}" for name, meta in plugin_info.items()]
+                          reply = "Jarvis สามารถช่วยได้ดังนี้:\n" + "\n".join(plugin_list)
+                       else:
+                          reply = "Jarvis มีคำสั่งพื้นฐาน เช่น สวัสดี, ดูข่าว, เช็คแบตเตอรี่, บันทึกค่าใช้จ่าย, ตั้งเตือน"
+                    else:
+                       # Plugin routing
+                       plugin_name = plugin_router.find_plugin(text)
+                       reply = None
+                       if plugin_name:
+                           plugin = plugin_loader.get_plugin(plugin_name)
+                           if plugin:
+                               try:
+                                   reply = plugin.execute(text)
+                               except Exception as exc:
+                                   reply = f"Plugin {plugin_name} error: {exc}"
 
                     if not reply:
                         # Basic fallback

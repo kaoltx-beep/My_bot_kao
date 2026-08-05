@@ -3,6 +3,19 @@ import expense_manager
 
 PLUGIN_NAME = "expense"
 
+METADATA = {
+    "name": "expense",
+    "description": "จัดการรายจ่าย",
+    "keywords": [
+        "รายจ่าย",
+        "expense",
+        "ดูรายจ่าย",
+        "เดือนนี้",
+        "บันทึกรายจ่าย",
+        "รายการ"
+    ]
+}
+
 
 def execute(text=None):
     if not text:
