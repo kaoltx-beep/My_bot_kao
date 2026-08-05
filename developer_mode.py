@@ -165,11 +165,23 @@ def approve(proposal_id: str) -> dict[str, Any]:
                 session["test"] = proc.stderr[-1500:] or proc.stdout[-1500:]
                 _save_session(session)
                 return {"ok": False, "status": "rolled_back", "error": "ทดสอบ syntax ไม่ผ่าน จึง rollback แล้ว", "test": session["test"]}
-        if subprocess.run(["git", "status", "--short", "--", session["file"]], cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=30).returncode != 0:
+        try:
+            git_status = subprocess.run(["git", "status", "--short", "--", session["file"]], cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=30)
+        except FileNotFoundError:
+            # Git is not available on this environment (e.g., some containers).
+            # Keep the applied change but mark it as tested_uncommitted.
+            session["status"] = "tested_uncommitted"
+            session["commit_error"] = "git not available"
+            _save_session(session)
+            return {"ok": False, "status": "tested_uncommitted", "error": "git not available — แก้ไขถูกนำไปใช้แล้ว แต่ยังไม่ได้ commit", "details": session["commit_error"]}
+
+        if git_status.returncode != 0:
             raise RuntimeError("git status failed")
+
         add = subprocess.run(["git", "add", "--", session["file"]], cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=30)
         if add.returncode != 0:
             raise RuntimeError(add.stderr.strip() or "git add failed")
+
         commit = subprocess.run(["git", "commit", "-m", f"Jarvis Developer Mode: update {session['file']}"], cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=30)
         if commit.returncode != 0:
             session["status"] = "tested_uncommitted"

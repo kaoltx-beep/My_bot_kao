@@ -1,66 +1,73 @@
+"""Battery status store with safe fallbacks for non-Android environments."""
+from __future__ import annotations
+
 import subprocess
 import json
+from typing import Optional
 
-level = 0
-<<<<<<< HEAD
-status = "unknown"
+# Public state
+level: int = -1
+status: str = "unknown"
+latest_battery: str = "ไม่ทราบ"
 
 
-def update():
+def _compose_latest() -> None:
+    global latest_battery
+    try:
+        if level >= 0:
+            latest_battery = f"{level}% ({status})"
+        else:
+            latest_battery = "ไม่สามารถดึงข้อมูลแบตเตอรี่ได้"
+    except Exception:
+        latest_battery = "ไม่สามารถดึงข้อมูลแบตเตอรี่ได้"
+
+
+def update() -> None:
+    """Try multiple platform-specific methods, but never raise to caller.
+
+    Order:
+    1. termux-battery-status (Termux Android)
+    2. dumpsys battery (Android)
+    3. fallback to unknown
+    """
     global level, status
 
-    # Method 1: Termux API
+    # Default when not available
+    level = -1
+    status = "unknown"
+
+    # Method 1: termux-battery-status
     try:
         raw = subprocess.check_output(["termux-battery-status"], text=True)
         data = json.loads(raw)
-
-        level = data.get("percentage", 0)
-        status = "charging" if data.get("status") == "CHARGING" else "discharging"
+        level = int(data.get("percentage", 0))
+        raw_status = str(data.get("status", "")).upper()
+        status = "กำลังชาร์จ ⚡" if raw_status == "CHARGING" else "ไม่ได้ชาร์จ 🔋"
+        if level <= 20:
+            status += " ⚠️ (แบตเตอรี่ต่ำ)"
+        _compose_latest()
         return
-
     except Exception:
+        # Not running on Termux or termux not available
         pass
 
-    # Method 2: Android dumpsys fallback
+    # Method 2: dumpsys battery (Android)
     try:
         raw = subprocess.check_output(["sh", "-c", "dumpsys battery"], text=True)
-
         for line in raw.splitlines():
             if "level:" in line:
-                level = int(line.split(":")[1].strip())
-
+                try:
+                    level = int(line.split(":")[1].strip())
+                except Exception:
+                    level = -1
             if "status:" in line:
-                status = "charging" if "2" in line else "discharging"
-
+                # status line on dumpsys often contains numeric codes
+                status = "กำลังชาร์จ ⚡" if "2" in line else "ไม่ได้ชาร์จ 🔋"
+        _compose_latest()
         return
-
     except Exception:
+        # Not available on server environments
         level = -1
-        status = "error"
-=======
-status = "กำลังตรวจสอบ"
-
-def update():
-    global level, status
-    try:
-        # ดึงค่าสถานะแบตเตอรี่จริงจาก Android
-        result = subprocess.check_output(["termux-battery-status"], text=True)
-        data = json.loads(result)
-        
-        level = data.get("percentage", 0)
-        raw_status = data.get("status")
-
-        if raw_status == "CHARGING":
-            status = "กำลังชาร์จ ⚡"
-        else:
-            status = "ไม่ได้ชาร์จ 🔋"
-
-        # แจ้งเตือนหากแบตเตอรี่ต่ำ
-        if level <= 20:
-            status += " ⚠️ (แบตเตอรี่ต่ำกว่า 20%)"
-            
-    except Exception:
         status = "ไม่สามารถดึงข้อมูลระบบได้"
 
-
->>>>>>> ef0ef12 (add pulse system)
+    _compose_latest()
