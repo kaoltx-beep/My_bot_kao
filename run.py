@@ -60,6 +60,33 @@ def start_telegram_polling_if_enabled():
         except Exception as exc:
             print("Warning: failed to import/register handlers:", exc)
 
+        # Attempt to delete any existing Telegram webhook to avoid 409 conflicts.
+        try:
+            # Try to call Telegram API directly; do not fail startup on errors.
+            try:
+                import requests
+                url = f"https://api.telegram.org/bot{token}/deleteWebhook"
+                resp = requests.post(url, timeout=10)
+                try:
+                    data = resp.json()
+                except Exception:
+                    data = resp.text
+                print("Telegram deleteWebhook response:", resp.status_code, data)
+            except Exception as exc:
+                print("Warning: deleteWebhook HTTP request failed:", exc)
+
+            # Also try library-level removal if available
+            try:
+                if hasattr(bot, "remove_webhook"):
+                    bot.remove_webhook()
+                elif hasattr(bot, "delete_webhook"):
+                    bot.delete_webhook()
+            except Exception as exc:
+                print("Warning: bot.remove_webhook/delete_webhook failed:", exc)
+        except Exception as exc:
+            # Ensure any unexpected issue doesn't crash the app
+            print("Warning: webhook removal encountered an error:", exc)
+
         def _poll():
             try:
                 print("📡 Telegram polling started")
