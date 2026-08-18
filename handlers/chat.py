@@ -1,4 +1,4 @@
-"""Jarvis chat pipeline: memory -> tool routing -> AI -> memory save."""
+"""Shared Jarvis chat pipeline: tools -> memory -> AI -> memory."""
 
 from __future__ import annotations
 
@@ -33,20 +33,29 @@ def _format_tool_result(result: Any) -> str:
     return f"ดำเนินการไม่สำเร็จ: {getattr(result, 'error', 'unknown error')}"
 
 
+def _save_memory(prompt: str, reply: str) -> None:
+    try:
+        import memory_manager_v2
+        memory_manager_v2.save_memory(prompt, reply)
+    except Exception as exc:
+        print("Memory save failed:", exc)
+
+
 def process_message(prompt: str) -> dict[str, Any]:
     text = (prompt or "").strip()
     if not text:
         return {"status": "error", "message": "prompt must not be empty"}
 
-    # 1) Deterministic tool routing. The existing safety executor remains the
-    # gatekeeper, so medium/high-risk tools cannot execute without approval.
+    # 1) Deterministic tool routing. ToolExecutor remains the safety gate.
     if _tool_system is not None:
         call = _tool_system.parse(text)
         if call is not None:
             result = _tool_system.execute(call.tool_name, call.params, approved=False)
+            reply = _format_tool_result(result)
+            _save_memory(text, reply)
             return {
                 "status": "success" if getattr(result, "success", False) else "error",
-                "reply": _format_tool_result(result),
+                "reply": reply,
                 "tool": call.tool_name,
                 "tool_result": {
                     "success": getattr(result, "success", False),
@@ -65,25 +74,25 @@ def process_message(prompt: str) -> dict[str, Any]:
         print("Memory read failed:", exc)
 
     if _ai_callback is None:
-        raise RuntimeError("Jarvis AI callback is not configured")
+        raise RuntimeError("Jarvis AI gateway is not configured")
 
     result = _ai_callback(text, memory)
-    reply = result.get("reply", "") if isinstance(result, dict) else str(result)
+    if not isinstance(result, dict):
+        result = {"status": "success", "reply": str(result)}
 
-    # 3) Persist the conversation after a successful AI response.
-    try:
-        import memory_manager_v2
-        memory_manager_v2.save_memory(text, reply)
-    except Exception as exc:
-        print("Memory save failed:", exc)
+    # 3) Persist the conversation after the AI response.
+    reply = str(result.get("reply", ""))
+    if reply:
+        _save_memory(text, reply)
 
     response: dict[str, Any] = {
-        "status": "success",
+        "status": result.get("status", "success"),
         "reply": reply,
         "memory_used": len(memory),
     }
-    if isinstance(result, dict) and result.get("message"):
-        response["message"] = result["message"]
+    for key in ("message", "model"):
+        if result.get(key):
+            response[key] = result[key]
     return response
 
 
