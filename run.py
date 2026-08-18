@@ -16,31 +16,48 @@ app.include_router(system_router)
 app.include_router(chat_router)
 
 
-# Keep the current AI implementation behind the handler boundary. This makes
-# /chat independently testable and lets the AI backend be replaced later
-# without moving FastAPI transport code back into run.py.
-def _chat_callback(prompt: str) -> dict[str, Any]:
+def _chat_callback(prompt: str, memory: list[Any] | None = None) -> dict[str, Any]:
+    """AI backend used by the shared chat pipeline."""
     try:
         import g4f
 
+        messages: list[dict[str, str]] = []
+        if memory:
+            context = "\n".join(
+                f"ผู้ใช้: {row[0]}\nJarvis: {row[1]}" for row in memory
+            )
+            messages.append({
+                "role": "system",
+                "content": "บริบทความจำล่าสุดของ Jarvis:\n" + context,
+            })
+        messages.append({"role": "user", "content": prompt})
+
         response = g4f.ChatCompletion.create(
             model="gpt-4o",
-            messages=[{"role": "user", "content": prompt}],
+            messages=messages,
         )
         return {"status": "success", "reply": response}
     except Exception as exc:
-        return {"status": "error", "message": str(exc)}
+        return {"status": "error", "message": str(exc), "reply": ""}
 
 
-configure_chat(_chat_callback)
+def _build_tool_system():
+    try:
+        from core.tool_system import JarvisToolSystem
+        return JarvisToolSystem()
+    except Exception as exc:
+        print("Tool system failed to initialize:", exc)
+        return None
+
+
+# One shared tool system is used by FastAPI and Telegram so both transports
+# execute through the same registry/router/safety layer.
+tool_system = _build_tool_system()
+configure_chat(_chat_callback, tool_system=tool_system)
 
 
 def start_telegram_polling_if_enabled():
-    """Start Telegram polling only when explicitly enabled.
-
-    n8n is the intended Telegram ingress for the Render deployment, so polling
-    defaults to disabled to avoid competing getUpdates consumers.
-    """
+    """Start Telegram polling only when explicitly enabled."""
     try:
         import plugin_loader
         plugin_loader.load_plugins()
@@ -62,13 +79,6 @@ def start_telegram_polling_if_enabled():
         bot = telebot.TeleBot(token)
 
         from handlers import register_handlers
-        try:
-            from core.tool_system import JarvisToolSystem
-            tool_system = JarvisToolSystem()
-        except Exception as exc:
-            print("Tool system failed to initialize:", exc)
-            tool_system = None
-
         register_handlers(bot, tool_system=tool_system)
 
         try:
