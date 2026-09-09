@@ -2,14 +2,12 @@ import os
 import json
 import ast
 import re
-from groq import Groq
-from config import GROQ_API_KEY
+from core.ai_gateway import get_gateway
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 READABLE_EXT = {".py", ".txt", ".md", ".json"}
 PROTECTED    = {"run.py", "config.py", ".env", "__pycache__"}
 MAX_LINES    = 100
-MODEL        = "llama-3.1-8b-instant"
 
 
 def _validate(code):
@@ -83,7 +81,7 @@ def _extract_create_target(request):
 
 def analyze(user_request):
     try:
-        client = Groq(api_key=GROQ_API_KEY)
+        gateway = get_gateway()
         all_files = _list_files()
 
         # Deterministic create-file path. Do not ask the model to guess
@@ -106,11 +104,9 @@ def analyze(user_request):
             for rel in relevant:
                 file_ctx += f"\n### {rel}\n{_read_snippet(rel)}\n"
 
-            # Call 1: แผนงาน
-            r1 = client.chat.completions.create(
-                model=MODEL,
-                max_tokens=300,
-                messages=[
+            # Call 1: แผนงาน — through the single AI gateway.
+            plan_text = gateway.chat(
+                [
                     {"role": "system", "content": (
                         "ตอบ JSON บรรทัดเดียว ห้ามพูดเพิ่ม\n"
                         '{"target_file":"path","action":"create_file or add_function","function_name":"name","description":"text"}\n'
@@ -123,12 +119,14 @@ def analyze(user_request):
                         f"ไฟล์: {', '.join(all_files)}\n"
                         f"{file_ctx}"
                     )},
-                ]
+                ],
+                max_tokens=300,
+                json_mode=True,
             )
 
-            plan = _extract_json(r1.choices[0].message.content.strip())
+            plan = _extract_json(plan_text.strip())
             if not plan:
-                return {"error": f"Call1 ไม่ได้ JSON: {r1.choices[0].message.content[:120]}"}
+                return {"error": f"Call1 ไม่ได้ JSON: {plan_text[:120]}"}
 
             target = plan.get("target_file", "")
             action = plan.get("action", "add_function")
@@ -147,7 +145,7 @@ def analyze(user_request):
         existing = _read_snippet(target) if os.path.exists(
             os.path.join(PROJECT_ROOT, target)) else "(ไฟล์ใหม่)"
 
-        # Call 2: เขียนโค้ด + retry สูงสุด 3 รอบ
+        # Call 2: เขียนโค้ด + retry สูงสุด 3 รอบ — through the same gateway.
         messages = [
             {"role": "system", "content": (
                 "เขียน Python function เท่านั้น\n"
@@ -163,10 +161,7 @@ def analyze(user_request):
 
         last_err = ""
         for attempt in range(3):
-            r2 = client.chat.completions.create(
-                model=MODEL, max_tokens=600, messages=messages
-            )
-            new_code = r2.choices[0].message.content.strip()
+            new_code = gateway.chat(messages, max_tokens=600).strip()
             if "```" in new_code:
                 new_code = "\n".join(
                     l for l in new_code.split("\n")
