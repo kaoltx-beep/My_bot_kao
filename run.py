@@ -1,4 +1,4 @@
-from config import TELEGRAM_TOKEN, GROQ_API_KEY
+from config import TELEGRAM_TOKEN
 
 import logging
 import threading
@@ -6,7 +6,6 @@ import json
 import telebot
 import time
 from queue import Queue
-from groq import Groq
 
 import device_actions
 import memory_manager
@@ -15,6 +14,7 @@ import tts
 from fastapi import FastAPI
 import uvicorn
 from developer.dev_router import handle_developer_request
+from core.ai_gateway import AIGatewayError, get_gateway
 
 # ------------------
 # STATUS
@@ -28,7 +28,7 @@ JARVIS_LIVE_STATUS = {
 logging.basicConfig(level=logging.ERROR)
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
-client = Groq(api_key=GROQ_API_KEY)
+gateway = get_gateway()
 
 task_queue = Queue()
 
@@ -54,7 +54,7 @@ def fallback_intent(text):
 
 
 # ------------------
-# AI
+# AI — Single Gateway
 # ------------------
 def ask_jarvis(user_message, history_text=""):
     prompt = f"""
@@ -71,15 +71,13 @@ User:
 """
 
     try:
-        res = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            response_format={"type": "json_object"},
-            messages=[{"role": "user", "content": prompt}]
+        content = gateway.chat(
+            [{"role": "user", "content": prompt}],
+            json_mode=True,
         )
+        return json.loads(content)
 
-        return json.loads(res.choices[0].message.content)
-
-    except Exception as e:
+    except (AIGatewayError, json.JSONDecodeError) as e:
         print("AI Error:", e)
         return {"reply": "ขออภัย ระบบ AI ขัดข้อง", "action": None}
 
@@ -173,7 +171,8 @@ def pulse():
     return {
         "status": "ok",
         "queue": task_queue.qsize(),
-        "time": time.time()
+        "time": time.time(),
+        "ai_gateway": gateway.status(),
     }
 
 
