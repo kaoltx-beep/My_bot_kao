@@ -15,6 +15,7 @@ from fastapi import FastAPI
 import uvicorn
 from developer.dev_router import handle_developer_request
 from core.ai_gateway import AIGatewayError, get_gateway
+from core.pipeline import process_text
 
 # ------------------
 # STATUS
@@ -36,21 +37,6 @@ ACTION_MAP = {
     "open_youtube": device_actions.open_youtube,
     "check_battery": device_actions.check_battery,
 }
-
-
-# ------------------
-# fallback intent
-# ------------------
-def fallback_intent(text):
-    text = text.lower()
-
-    if "แบต" in text or "battery" in text:
-        return "check_battery"
-
-    if "youtube" in text or "ยูทูป" in text:
-        return "open_youtube"
-
-    return None
 
 
 # ------------------
@@ -90,38 +76,21 @@ def worker():
         task = task_queue.get()
 
         reply = ""   # กันพัง
-        action = None
 
         try:
             chat_id = task["chat_id"]
             text = task["text"]
             history = task["history"]
 
-            history_text = "\n".join([f"U:{u} B:{b}" for u, b in history])
-
-            # Developer Mode must run BEFORE legacy plugins so that
-            # create/patch/confirm commands use the pending-confirm flow.
-            dev_result = handle_developer_request(text)
-            if dev_result:
-                reply = str(dev_result)
-                bot.send_message(chat_id, reply)
-                continue
-
             import plugin_router
-            plugin_reply = plugin_router.execute_plugin(text)
-
-            if plugin_reply:
-                reply = plugin_reply
-            else:
-                result = ask_jarvis(text, history_text)
-                action = result.get("action") or fallback_intent(text)
-                reply = result.get("reply") or "รับทราบ"
-
-            if action and action in ACTION_MAP:
-                try:
-                    reply = ACTION_MAP[action]()
-                except Exception as e:
-                    print("ACTION Error:", e)
+            reply = process_text(
+                text,
+                history,
+                developer_fn=handle_developer_request,
+                plugin_fn=plugin_router.execute_plugin,
+                ai_fn=ask_jarvis,
+                action_map=ACTION_MAP,
+            )
 
             bot.send_message(chat_id, reply)
 
