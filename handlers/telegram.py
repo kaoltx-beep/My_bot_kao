@@ -9,16 +9,25 @@ from .chat import process_message
 
 
 def register_handlers(bot: Any, tool_system: Any = None) -> None:
-    """Register Telegram messages against the same pipeline as /chat."""
+    """Register Telegram messages; accept only the configured private chat."""
 
     @bot.message_handler(func=lambda message: bool(getattr(message, "text", None)))
     def handle_message(message: Any) -> None:
+        # Fail closed: an unset/invalid allow-list must never expose the bot.
+        try:
+            import config
+            allowed_chat_id = int(getattr(config, "TELEGRAM_CHAT_ID", 0) or 0)
+            incoming_chat_id = int(message.chat.id)
+        except (ImportError, AttributeError, TypeError, ValueError):
+            return
+
+        if allowed_chat_id <= 0 or incoming_chat_id != allowed_chat_id:
+            return
+
         text = message.text.strip()
         if not text:
             return
 
-        # Explicit device TTS commands. These must be handled here so they
-        # do not get swallowed by the normal AI chat pipeline.
         if text == "/stop":
             try:
                 from tts import stop
@@ -27,8 +36,8 @@ def register_handlers(bot: Any, tool_system: Any = None) -> None:
                     message.chat.id,
                     "หยุดเสียงแล้ว" if stopped else "ตอนนี้ไม่มีเสียงที่กำลังพูดอยู่",
                 )
-            except Exception as exc:
-                bot.send_message(message.chat.id, f"หยุดเสียงไม่สำเร็จ: {exc}")
+            except Exception:
+                bot.send_message(message.chat.id, "หยุดเสียงไม่สำเร็จ")
             return
 
         if text.startswith("/speak"):
@@ -39,18 +48,15 @@ def register_handlers(bot: Any, tool_system: Any = None) -> None:
 
             try:
                 from tts import speak
-
-                # Speak asynchronously so Telegram polling remains responsive.
                 threading.Thread(target=speak, args=(speech,), daemon=True).start()
                 bot.send_message(message.chat.id, "🔊 กำลังพูด: " + speech)
-            except Exception as exc:
-                bot.send_message(message.chat.id, f"TTS Error: {exc}")
+            except Exception:
+                bot.send_message(message.chat.id, "เริ่มระบบเสียงไม่สำเร็จ")
             return
 
         try:
             result = process_message(text)
             reply = result.get("reply") or result.get("message") or "ดำเนินการสำเร็จ"
-        except Exception as exc:
-            reply = f"เกิดข้อผิดพลาดในการประมวลผล: {exc}"
-
+        except Exception:
+            reply = "เกิดข้อผิดพลาดในการประมวลผล กรุณาลองใหม่"
         bot.send_message(message.chat.id, str(reply))
