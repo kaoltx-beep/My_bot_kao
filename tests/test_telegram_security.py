@@ -21,7 +21,7 @@ class FakeBot:
 
 
 def make_message(chat_id, text="hello", user_id=None):
-    return SimpleNamespace(chat=SimpleNamespace(id=chat_id), from_user=SimpleNamespace(id=user_id if user_id is not None else chat_id), text=text)
+    return SimpleNamespace(chat=SimpleNamespace(id=chat_id, type="private"), from_user=SimpleNamespace(id=user_id if user_id is not None else chat_id), text=text)
 
 
 class TelegramAccessControlTests(unittest.TestCase):

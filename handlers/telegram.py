@@ -15,6 +15,15 @@ def register_handlers(bot: Any, tool_system: Any = None) -> None:
 
     @bot.message_handler(func=lambda message: bool(getattr(message, "text", None)))
     def handle_message(message: Any) -> None:
+        text = (getattr(message, "text", "") or "").strip()
+        if text == "/myid":
+            if getattr(message.chat, "type", "") != "private":
+                bot.send_message(message.chat.id, "เพื่อความเป็นส่วนตัว ให้ส่ง /myid ในแชทส่วนตัวกับบอท")
+                return
+            actor_id = getattr(getattr(message, "from_user", None), "id", None)
+            bot.send_message(message.chat.id, f"Telegram User ID: {actor_id}" if actor_id is not None else "อ่าน Telegram User ID ไม่ได้")
+            return
+
         # Fail closed: an unset/invalid allow-list must never expose the bot.
         try:
             import config
@@ -26,16 +35,7 @@ def register_handlers(bot: Any, tool_system: Any = None) -> None:
         if allowed_chat_id <= 0 or incoming_chat_id != allowed_chat_id:
             return
 
-        text = message.text.strip()
         if not text:
-            return
-
-        if text == "/myid":
-            actor_id = getattr(getattr(message, "from_user", None), "id", None)
-            if actor_id is None:
-                bot.send_message(message.chat.id, "อ่าน Telegram User ID ไม่ได้")
-            else:
-                bot.send_message(message.chat.id, f"Telegram User ID: {actor_id}")
             return
 
         if is_developer_command(text):
