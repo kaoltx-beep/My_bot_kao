@@ -93,14 +93,14 @@ def _get_groq_client(groq_client=None):
         return exc
 
 
-def _execute_auto(text: str, groq_client=None):
+def _execute_auto(text: str, groq_client=None, actor_id=None):
     """Run Developer Mode end-to-end without a manual approval step."""
     normalized = (text or "").strip()
     remainder = re.sub(r"^(?:ดำเนินการต่อ|ดำเนินการ)\s*", "", normalized, count=1).strip()
 
     proposal = developer_mode._load_session()
     if not remainder and proposal.get("id") and proposal.get("status") == "pending":
-        return _result_for_run(developer_mode.approve(proposal["id"]))
+        return _result_for_run(developer_mode.approve(proposal["id"], actor_id=actor_id))
 
     if not remainder:
         return _result_for_run({"ok": False, "error": "โหมดอัตโนมัติต้องระบุงาน เช่น ดำเนินการต่อ แก้ไฟล์ run.py ..."})
@@ -117,11 +117,13 @@ def _execute_auto(text: str, groq_client=None):
     if not proposal_id:
         return _result_for_run({"ok": False, "error": "AI สร้างผลลัพธ์แล้วแต่ไม่มี proposal id"})
 
-    approved = developer_mode.approve(proposal_id)
+    approved = developer_mode.approve(proposal_id, actor_id=actor_id)
     return _result_for_run(approved)
 
 
-def execute_developer_command(text: str, root=".", groq_client=None):
+def execute_developer_command(text: str, root=".", groq_client=None, actor_id=None):
+    if not developer_mode.is_authorized_admin(actor_id):
+        return _result_for_run({"ok": False, "error": "ไม่มีสิทธิ์ใช้งาน Developer Mode"})
     normalized = (text or "").lower().strip()
 
     if normalized in ("สถานะระบบ", "/status", "status"):
@@ -143,11 +145,11 @@ def execute_developer_command(text: str, root=".", groq_client=None):
         return _result_for_run(developer_mode.self_test_rollback())
 
     if normalized.startswith("ดำเนินการต่อ") or normalized.startswith("ดำเนินการ"):
-        return _execute_auto(text, groq_client=groq_client)
+        return _execute_auto(text, groq_client=groq_client, actor_id=actor_id)
 
     match = re.search(r"อนุมัติ\s+([a-f0-9]{10})", normalized)
     if match:
-        return _result_for_run(developer_mode.approve(match.group(1)))
+        return _result_for_run(developer_mode.approve(match.group(1), actor_id=actor_id))
 
     match = re.search(r"(?:ยกเลิก patch|ยกเลิกแพตช์)\s+([a-f0-9]{10})", normalized)
     if match:

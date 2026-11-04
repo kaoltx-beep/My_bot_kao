@@ -6,6 +6,8 @@ import threading
 from typing import Any
 
 from .chat import process_message
+import developer_mode
+from developer_mode_router import execute_developer_command, is_developer_command
 
 
 def register_handlers(bot: Any, tool_system: Any = None) -> None:
@@ -13,6 +15,15 @@ def register_handlers(bot: Any, tool_system: Any = None) -> None:
 
     @bot.message_handler(func=lambda message: bool(getattr(message, "text", None)))
     def handle_message(message: Any) -> None:
+        text = (getattr(message, "text", "") or "").strip()
+        if text == "/myid":
+            if getattr(message.chat, "type", "") != "private":
+                bot.send_message(message.chat.id, "เพื่อความเป็นส่วนตัว ให้ส่ง /myid ในแชทส่วนตัวกับบอท")
+                return
+            actor_id = getattr(getattr(message, "from_user", None), "id", None)
+            bot.send_message(message.chat.id, f"Telegram User ID: {actor_id}" if actor_id is not None else "อ่าน Telegram User ID ไม่ได้")
+            return
+
         # Fail closed: an unset/invalid allow-list must never expose the bot.
         try:
             import config
@@ -24,8 +35,21 @@ def register_handlers(bot: Any, tool_system: Any = None) -> None:
         if allowed_chat_id <= 0 or incoming_chat_id != allowed_chat_id:
             return
 
-        text = message.text.strip()
         if not text:
+            return
+
+        if is_developer_command(text):
+            actor_id = getattr(getattr(message, "from_user", None), "id", None)
+            if not developer_mode.is_authorized_admin(actor_id):
+                bot.send_message(message.chat.id, "⛔ ไม่มีสิทธิ์ใช้งาน Developer Mode")
+                return
+            try:
+                result = execute_developer_command(text, actor_id=actor_id)
+                files = result.get("files") or []
+                reply = "\n".join(str(item.get("file") or item.get("errors") or "") for item in files).strip()
+                bot.send_message(message.chat.id, reply or "Developer Mode ทำงานแล้ว แต่ไม่มีข้อความตอบกลับ")
+            except Exception:
+                bot.send_message(message.chat.id, "Developer Mode เกิดข้อผิดพลาด")
             return
 
         if text == "/stop":

@@ -21,6 +21,14 @@ PROTECTED = {".env", ".git", "config.py", "data/developer_session.json"}
 ALLOWED_EXTENSIONS = {".py", ".txt", ".md", ".json", ".sh", ".cfg", ".ini"}
 
 
+def is_authorized_admin(actor_id: Any, admin_ids: str | None = None) -> bool:
+    """Fail closed unless the Telegram actor is explicitly allow-listed."""
+    configured = os.getenv("JARVIS_DEVELOPER_ADMIN_IDS", "") if admin_ids is None else admin_ids
+    allowed = {item.strip() for item in str(configured).split(",") if item.strip()}
+    actor = str(actor_id).strip() if actor_id is not None else ""
+    return bool(actor and allowed and actor in allowed)
+
+
 def _load_session() -> dict[str, Any]:
     try:
         if SESSION_FILE.exists():
@@ -44,7 +52,9 @@ def _safe_path(filename: str) -> Path:
     if path != root and root not in path.parents:
         raise ValueError("ไฟล์อยู่นอก project ไม่อนุญาต")
     rel = path.relative_to(root).as_posix()
-    if rel in PROTECTED or any(rel == p or rel.startswith(p + "/") for p in PROTECTED if p == ".git"):
+    parts = rel.split("/") if rel else []
+    protected = {item.lower() for item in PROTECTED}
+    if any(part.startswith(".") for part in parts) or rel.lower() in protected or any(part.lower() == ".env" for part in parts):
         raise ValueError("ไฟล์นี้ถูกป้องกัน ไม่อนุญาตให้ Developer Mode แก้")
     if path.suffix.lower() not in ALLOWED_EXTENSIONS:
         raise ValueError(f"ไม่รองรับไฟล์ประเภท {path.suffix}")
@@ -142,7 +152,9 @@ def prepare_patch(text: str, groq_client=None) -> dict[str, Any]:
     return {"ok": True, "proposal_id": proposal_id, "file": filename, "summary": session["summary"], "diff": diff}
 
 
-def approve(proposal_id: str) -> dict[str, Any]:
+def approve(proposal_id: str, actor_id: Any = None) -> dict[str, Any]:
+    if not is_authorized_admin(actor_id):
+        return {"ok": False, "error": "ไม่มีสิทธิ์อนุมัติ Developer Mode"}
     session = _load_session()
     if not session or session.get("id") != proposal_id:
         return {"ok": False, "error": "ไม่พบ proposal นี้"}
