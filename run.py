@@ -201,6 +201,7 @@ def worker():
         try:
             chat_id = task["chat_id"]
             text = task["text"]
+            actor_id = task.get("actor_id")
 
             auto_saved = auto_work.save_auto_work(text)
             history = task["history"]
@@ -223,7 +224,9 @@ def worker():
                 personality.set_mode("NORMAL")
                 reply = "กลับโหมดปกติแล้วครับ"
             elif developer_mode_router.is_developer_command(text):
-                developer_result = developer_mode_router.execute_developer_command(text)
+                developer_result = developer_mode_router.execute_developer_command(
+                    text, actor_id=actor_id
+                )
                 reply = _format_developer_result(developer_result)
             else:
                 result = ask_jarvis(text, history_text)
@@ -323,6 +326,7 @@ def handle(m):
             return
         task_queue.put({
             "chat_id": m.chat.id,
+            "actor_id": getattr(getattr(m, "from_user", None), "id", None),
             "text": text,
             "history": memory_manager.get_memory(5)
         })
