@@ -41,18 +41,25 @@ def _save_session(data: dict[str, Any]) -> None:
 
 
 def _safe_path(filename: str) -> Path:
-    raw = filename.strip().replace("\\", "/")
+    raw = filename.strip().replace("\\\\", "/")
+    if not raw or "\\x00" in raw:
+        raise ValueError("ชื่อไฟล์ไม่ถูกต้อง")
     path = (PROJECT_ROOT / raw).resolve()
     root = PROJECT_ROOT.resolve()
     if path != root and root not in path.parents:
         raise ValueError("ไฟล์อยู่นอก project ไม่อนุญาต")
     rel = path.relative_to(root).as_posix()
-    if rel in PROTECTED or any(rel == p or rel.startswith(p + "/") for p in PROTECTED if p in {".git"}):
+    parts = rel.split("/")
+    lower_parts = [part.lower() for part in parts]
+    if any(part.startswith(".") for part in parts):
+        raise ValueError("ไม่อนุญาตให้แก้ไฟล์หรือโฟลเดอร์ที่ซ่อนอยู่")
+    if any(part in PROTECTED or part.startswith(".env") for part in lower_parts):
         raise ValueError("ไฟล์นี้ถูกป้องกัน ไม่อนุญาตให้ Developer Mode แก้")
+    if any("secret" in part or "credential" in part or "token" in part for part in lower_parts):
+        raise ValueError("ไฟล์ที่อาจมีข้อมูลลับถูกป้องกัน")
     if path.suffix.lower() not in ALLOWED_EXTENSIONS:
         raise ValueError(f"ไม่รองรับไฟล์ประเภท {path.suffix}")
     return path
-
 
 def _read(path: Path) -> str:
     text = path.read_text(encoding="utf-8")
