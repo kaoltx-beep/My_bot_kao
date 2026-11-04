@@ -63,12 +63,12 @@ def _result_for_run(result: dict) -> dict:
     return {"files": [{"status": "error", "file": "Developer Mode", "errors": [result.get("error", "เกิดข้อผิดพลาด")] }]}
 
 
-def execute_developer_command(text: str, root=".", groq_client=None):
+def execute_developer_command(text: str, root=".", groq_client=None, actor_id=None):
     normalized = (text or "").lower().strip()
 
     match = re.search(r"อนุมัติ\s+([a-f0-9]{10})", normalized)
     if match:
-        return _result_for_run(developer_mode.approve(match.group(1)))
+        return _result_for_run(developer_mode.approve(match.group(1), actor_id=actor_id))
 
     match = re.search(r"(?:ยกเลิก patch|ยกเลิกแพตช์)\s+([a-f0-9]{10})", normalized)
     if match:
