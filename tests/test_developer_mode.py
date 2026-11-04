@@ -21,6 +21,21 @@ class DeveloperModeTests(unittest.TestCase):
         for backup in self.target.parent.glob(self.target.name + ".backup_*"):
             backup.unlink(missing_ok=True)
 
+    def test_admin_allowlist_fails_closed(self):
+        self.assertFalse(developer_mode.is_authorized_admin(123, ""))
+        self.assertFalse(developer_mode.is_authorized_admin(None, "123"))
+        self.assertFalse(developer_mode.is_authorized_admin(456, "123,789"))
+
+    def test_admin_allowlist_accepts_configured_actor(self):
+        self.assertTrue(developer_mode.is_authorized_admin(123, "123,456"))
+
+    def test_approve_denies_missing_or_wrong_actor(self):
+        self._write_proposal({"id": "abc123def4", "status": "pending"})
+        with patch.dict("os.environ", {"JARVIS_DEVELOPER_ADMIN_IDS": "123"}):
+            result = developer_mode.approve("abc123def4", actor_id=456)
+        self.assertFalse(result["ok"])
+        self.assertIn("ไม่มีสิทธิ์", result["error"])
+
     def test_analyze_existing_python_file(self):
         result = developer_mode.analyze_file("run.py")
         self.assertTrue(result["ok"])
@@ -78,7 +93,7 @@ class DeveloperModeTests(unittest.TestCase):
             raise AssertionError(f"unexpected subprocess call: {args}")
 
         with patch.object(developer_mode.subprocess, "run", side_effect=fake_run):
-            result = developer_mode.approve("abc123def4")
+            result = developer_mode.approve("abc123def4", actor_id=123)
 
         self.assertTrue(result["ok"])
         self.assertEqual(result["status"], "committed")
@@ -108,7 +123,7 @@ class DeveloperModeTests(unittest.TestCase):
             raise AssertionError(f"unexpected subprocess call: {args}")
 
         with patch.object(developer_mode.subprocess, "run", side_effect=fake_run):
-            result = developer_mode.approve("fedcba9876")
+            result = developer_mode.approve("fedcba9876", actor_id=123)
 
         self.assertFalse(result["ok"])
         self.assertIn("commit ไม่สำเร็จ", result["error"])
@@ -140,7 +155,7 @@ class DeveloperModeTests(unittest.TestCase):
         for backup in target.parent.glob(target.name + ".backup_*"):
             backup.unlink(missing_ok=True)
 
-        result = developer_mode.approve("deadbeef01")
+        result = developer_mode.approve("deadbeef01", actor_id=123)
 
         self.assertFalse(result["ok"])
         self.assertIn("rollback", result["error"])

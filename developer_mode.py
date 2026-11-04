@@ -21,6 +21,14 @@ PROTECTED = {".env", ".git", "config.py", "data/developer_session.json"}
 ALLOWED_EXTENSIONS = {".py", ".txt", ".md", ".json", ".sh", ".cfg", ".ini"}
 
 
+def is_authorized_admin(actor_id: Any, admin_ids: str | None = None) -> bool:
+    """Fail closed unless the Telegram actor is explicitly allow-listed."""
+    configured = os.getenv("JARVIS_DEVELOPER_ADMIN_IDS", "") if admin_ids is None else admin_ids
+    allowed = {item.strip() for item in str(configured).split(",") if item.strip()}
+    actor = str(actor_id).strip() if actor_id is not None else ""
+    return bool(actor and allowed and actor in allowed)
+
+
 def _load_session() -> dict[str, Any]:
     try:
         if SESSION_FILE.exists():
@@ -142,7 +150,9 @@ def prepare_patch(text: str, groq_client=None) -> dict[str, Any]:
     return {"ok": True, "proposal_id": proposal_id, "file": filename, "summary": session["summary"], "diff": diff}
 
 
-def approve(proposal_id: str) -> dict[str, Any]:
+def approve(proposal_id: str, actor_id: Any = None) -> dict[str, Any]:
+    if not is_authorized_admin(actor_id):
+        return {"ok": False, "error": "ไม่มีสิทธิ์อนุมัติ Developer Mode"}
     session = _load_session()
     if not session or session.get("id") != proposal_id:
         return {"ok": False, "error": "ไม่พบ proposal นี้"}
