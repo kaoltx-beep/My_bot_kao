@@ -46,7 +46,7 @@ def register_handlers(bot: Any, tool_system: Any = None) -> None:
             try:
                 result = execute_developer_command(text, actor_id=actor_id)
                 files = result.get("files") or []
-                reply = "\\n".join(str(item.get("file") or item.get("errors") or "") for item in files).strip()
+                reply = "\n".join(str(item.get("file") or item.get("errors") or "") for item in files).strip()
                 bot.send_message(message.chat.id, reply or "Developer Mode ทำงานแล้ว แต่ไม่มีข้อความตอบกลับ")
             except Exception:
                 bot.send_message(message.chat.id, "Developer Mode เกิดข้อผิดพลาด")
