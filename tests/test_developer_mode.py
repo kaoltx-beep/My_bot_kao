@@ -17,6 +17,21 @@ class DeveloperModeTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             developer_mode._safe_path("config.py")
 
+    def test_nested_env_file_is_blocked(self):
+        with self.assertRaises(ValueError):
+            developer_mode._safe_path("settings/.env.production")
+
+    def test_hidden_directory_is_blocked(self):
+        with self.assertRaises(ValueError):
+            developer_mode._safe_path(".github/workflows/test.yml")
+
+    def test_approval_fails_closed_without_admin_id(self):
+        self.assertFalse(developer_mode._is_authorized_admin(None, "12345"))
+        self.assertFalse(developer_mode._is_authorized_admin(67890, "12345"))
+
+    def test_approval_allows_only_configured_admin_id(self):
+        self.assertTrue(developer_mode._is_authorized_admin(12345, "12345,99999"))
+
     def test_non_code_extension_is_blocked(self):
         with self.assertRaises(ValueError):
             developer_mode._safe_path("notes.exe")
