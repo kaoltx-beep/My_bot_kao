@@ -20,7 +20,7 @@ from typing import Any
 PROJECT_ROOT = Path(__file__).resolve().parent
 SESSION_FILE = PROJECT_ROOT / "data" / "developer_session.json"
 MAX_FILE_CHARS = 12000
-PROTECTED = {".env", ".git", "config.py", "data/developer_session.json"}
+PROTECTED = {".env", ".git", "config.py", "credentials", "secrets", "data/developer_session.json"}
 ALLOWED_EXTENSIONS = {".py", ".txt", ".md", ".json", ".sh", ".cfg", ".ini"}
 
 
@@ -155,7 +155,16 @@ def prepare_patch(text: str, groq_client=None) -> dict[str, Any]:
     return {"ok": True, "proposal_id": proposal_id, "file": filename, "summary": summary, "diff": diff}
 
 
-def approve(proposal_id: str) -> dict[str, Any]:
+def _is_authorized_admin(actor_id: int | str | None, admin_ids: str | None = None) -> bool:
+    """Only explicitly configured Telegram user IDs may apply a patch."""
+    configured = os.getenv("JARVIS_DEVELOPER_ADMIN_IDS", "") if admin_ids is None else admin_ids
+    allowed = {item.strip() for item in configured.split(",") if item.strip().isdigit()}
+    return actor_id is not None and str(actor_id).isdigit() and str(actor_id) in allowed
+
+
+def approve(proposal_id: str, actor_id: int | str | None = None) -> dict[str, Any]:
+    if not _is_authorized_admin(actor_id):
+        return {"ok": False, "error": "ไม่มีสิทธิ์อนุมัติ patch: ต้องกำหนด JARVIS_DEVELOPER_ADMIN_IDS และส่ง Telegram user ID"}
     session = _load_session()
     if not session or session.get("id") != proposal_id:
         return {"ok": False, "error": "ไม่พบ proposal นี้"}
