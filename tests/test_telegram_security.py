@@ -59,6 +59,17 @@ class TelegramAccessControlTests(unittest.TestCase):
             bot.handler(make_message(123, "/myid", user_id=987654))
         self.assertEqual(bot.sent, [(123, "Telegram User ID: 987654")])
 
+    def test_authorized_developer_command_receives_sender_id(self):
+        bot = FakeBot()
+        with patch("config.TELEGRAM_CHAT_ID", 123), patch("handlers.telegram.developer_mode.is_authorized_admin", return_value=True), patch(
+            "handlers.telegram.execute_developer_command",
+            return_value={"files": [{"status": "ok", "file": "status ok"}]},
+        ) as execute:
+            register_handlers(bot)
+            bot.handler(make_message(123, "สถานะระบบ", user_id=987654))
+        execute.assert_called_once_with("สถานะระบบ", actor_id=987654)
+        self.assertEqual(bot.sent, [(123, "status ok")])
+
     def test_developer_command_denied_without_admin_allowlist(self):
         bot = FakeBot()
         with patch("config.TELEGRAM_CHAT_ID", 123), patch.dict("os.environ", {"JARVIS_DEVELOPER_ADMIN_IDS": ""}), patch("handlers.telegram.process_message") as process:

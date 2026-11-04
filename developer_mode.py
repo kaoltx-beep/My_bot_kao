@@ -52,7 +52,9 @@ def _safe_path(filename: str) -> Path:
     if path != root and root not in path.parents:
         raise ValueError("ไฟล์อยู่นอก project ไม่อนุญาต")
     rel = path.relative_to(root).as_posix()
-    if rel in PROTECTED or any(rel == p or rel.startswith(p + "/") for p in PROTECTED if p == ".git"):
+    parts = rel.split("/") if rel else []
+    protected = {item.lower() for item in PROTECTED}
+    if any(part.startswith(".") for part in parts) or rel.lower() in protected or any(part.lower() == ".env" for part in parts):
         raise ValueError("ไฟล์นี้ถูกป้องกัน ไม่อนุญาตให้ Developer Mode แก้")
     if path.suffix.lower() not in ALLOWED_EXTENSIONS:
         raise ValueError(f"ไม่รองรับไฟล์ประเภท {path.suffix}")

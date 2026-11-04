@@ -11,6 +11,9 @@ class DeveloperModeTests(unittest.TestCase):
         self.session_path = developer_mode.PROJECT_ROOT / "tests" / "_devmode_session.json"
         self.target.write_text("original\n", encoding="utf-8")
         self.addCleanup(self._cleanup)
+        self.admin_env = patch.dict("os.environ", {"JARVIS_DEVELOPER_ADMIN_IDS": "123"})
+        self.admin_env.start()
+        self.addCleanup(self.admin_env.stop)
         self.original_session_file = developer_mode.SESSION_FILE
         developer_mode.SESSION_FILE = self.session_path
 
@@ -44,6 +47,14 @@ class DeveloperModeTests(unittest.TestCase):
     def test_path_traversal_is_blocked(self):
         with self.assertRaises(ValueError):
             developer_mode._safe_path("../run.py")
+
+    def test_nested_env_file_is_blocked(self):
+        with self.assertRaises(ValueError):
+            developer_mode._safe_path("data/nested/.env")
+
+    def test_hidden_directory_is_blocked(self):
+        with self.assertRaises(ValueError):
+            developer_mode._safe_path(".hidden/notes.txt")
 
     def test_protected_config_is_blocked(self):
         with self.assertRaises(ValueError):
