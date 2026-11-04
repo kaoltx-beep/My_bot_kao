@@ -1,6 +1,8 @@
 import unittest
+from unittest.mock import patch
 
 import developer_mode
+import developer_mode_router
 
 
 class DeveloperModeTests(unittest.TestCase):
@@ -39,6 +41,14 @@ class DeveloperModeTests(unittest.TestCase):
     def test_code_fence_cleanup(self):
         cleaned = developer_mode._clean_model_code("```python\nprint('ok')\n```")
         self.assertEqual(cleaned, "print('ok')\n")
+
+    @patch("developer_mode_router.developer_mode.approve")
+    def test_router_forwards_telegram_actor_id(self, approve_mock):
+        approve_mock.return_value = {"ok": False, "error": "test"}
+        developer_mode_router.execute_developer_command(
+            "อนุมัติ abcdef1234", actor_id=123456789
+        )
+        approve_mock.assert_called_once_with("abcdef1234", actor_id=123456789)
 
 
 if __name__ == "__main__":
