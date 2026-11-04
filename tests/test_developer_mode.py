@@ -50,6 +50,10 @@ class DeveloperModeTests(unittest.TestCase):
         )
         approve_mock.assert_called_once_with("abcdef1234", actor_id=123456789)
 
+    def test_developer_session_file_is_protected(self):
+        with self.assertRaises(ValueError):
+            developer_mode._safe_path("data/developer_session.json")
+
 
 if __name__ == "__main__":
     unittest.main()
