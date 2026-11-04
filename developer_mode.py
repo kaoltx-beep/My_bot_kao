@@ -41,8 +41,8 @@ def _save_session(data: dict[str, Any]) -> None:
 
 
 def _safe_path(filename: str) -> Path:
-    raw = filename.strip().replace("\\\\", "/")
-    if not raw or "\\x00" in raw:
+    raw = filename.strip().replace("\\", "/")
+    if not raw or "\x00" in raw:
         raise ValueError("ชื่อไฟล์ไม่ถูกต้อง")
     path = (PROJECT_ROOT / raw).resolve()
     root = PROJECT_ROOT.resolve()
