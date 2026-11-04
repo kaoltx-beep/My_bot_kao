@@ -53,7 +53,10 @@ def _safe_path(filename: str) -> Path:
     lower_parts = [part.lower() for part in parts]
     if any(part.startswith(".") for part in parts):
         raise ValueError("ไม่อนุญาตให้แก้ไฟล์หรือโฟลเดอร์ที่ซ่อนอยู่")
-    if any(part in PROTECTED or part.startswith(".env") for part in lower_parts):
+    protected_paths = {item.lower().replace("\\", "/") for item in PROTECTED}
+    if rel.lower() in protected_paths or any(
+        part in protected_paths or part.startswith(".env") for part in lower_parts
+    ):
         raise ValueError("ไฟล์นี้ถูกป้องกัน ไม่อนุญาตให้ Developer Mode แก้")
     if any("secret" in part or "credential" in part or "token" in part for part in lower_parts):
         raise ValueError("ไฟล์ที่อาจมีข้อมูลลับถูกป้องกัน")
