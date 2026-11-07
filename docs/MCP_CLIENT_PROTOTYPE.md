@@ -52,7 +52,7 @@ asyncio.run(inspect())
 Run the isolated safety tests without installing the MCP SDK:
 
 ```bash
-python -m unittest tests.test_mcp_client -v
+python -m unittest discover -s tests -p 'test_mcp_client.py' -v
 ```
 
 These tests cover URL restrictions, explicit approval, and the tool allowlist. They do not claim that a real MCP server connection has been tested.
