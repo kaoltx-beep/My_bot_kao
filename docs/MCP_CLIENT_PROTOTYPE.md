@@ -20,9 +20,12 @@ This is a disconnected prototype. It is **not** registered in Jarvis's default T
 - A different chat or user cannot consume the request.
 - Expired and legacy records without an expiry timestamp fail closed.
 - A request can be consumed only once, and only with status `approved` or `rejected`.
+- The Telegram callback must come from the original approval message, the configured private chat, and the requesting Telegram user.
+- A successful consume returns a signed, one-use grant bound to the exact tool name and exact parameters. The MCP adapter rejects a bare `approved=True`, altered parameters, expired grants, and replayed grants.
+- The signing secret is process-local; a restart invalidates grants rather than allowing a persisted approval to be replayed.
 - The approval-store tests use a temporary file and do not touch production approval data.
 
-**Important integration status:** the current `handlers/telegram.py` only accepts messages from the configured private chat and does not register an approval callback handler. The approval store is a hardened primitive, not a complete Telegram approval workflow. Do not pass `approved=True` to MCP execution until a callback handler has been implemented and tested to call `consume(..., chat_id=..., user_id=...)` and then execute only the exact stored tool and parameters. The legacy `tools/integrate_approval.py` patcher is not the active modular Telegram handler.
+**Integration status:** `handlers/telegram.py` now registers an approval callback, pauses medium/high/explicitly approval-required tools, and only executes the exact stored tool and parameters after `consume(..., chat_id=..., user_id=..., message_id=...)` succeeds. The callback is bound to the original Telegram message. The MCP adapter additionally requires the signed one-use grant; a bare boolean is insufficient. The legacy `tools/integrate_approval.py` patcher is not used by the modular handler.
 
 ## Optional local installation
 
@@ -77,11 +80,10 @@ The SDK integration test uses an in-memory MCP server. It does not connect to a 
 
 ## Next steps before integration
 
-1. Implement a modular Telegram approval callback with chat/user binding and expiry checks.
-2. Add handler tests for wrong user, wrong chat, expired requests, replay, and exact stored tool/arguments.
-3. Add an approval-grant boundary so a plain boolean cannot be treated as proof of user consent.
-4. Test the callback and MCP adapter together using only an in-memory read-only server.
-5. Keep production deployment, credentials, workflows, and the default registry unchanged until a separate approval.
+1. Complete the isolated Telegram approval-flow tests and MCP adapter grant tests.
+2. Run CI and review the complete callback-to-executor path.
+3. Test with an in-memory read-only MCP server only; do not use a remote endpoint until a separate approval.
+4. Keep production deployment, credentials, workflows, and the default registry unchanged until a separate approval.
 
 ## References
 
