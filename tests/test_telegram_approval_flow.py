@@ -59,11 +59,15 @@ class TelegramApprovalFlowTests(unittest.TestCase):
         self.config_patch = patch.dict(sys.modules, {"config": self.config})
         self.config_patch.start()
         self.telebot = types.ModuleType("telebot")
+        class InlineKeyboardMarkup:
+            def __init__(self, **_kwargs):
+                self.buttons = []
+            def add(self, *buttons):
+                self.buttons.extend(buttons)
         self.telebot.types = SimpleNamespace(
-            InlineKeyboardMarkup=lambda **_kwargs: SimpleNamespace(buttons=[]),
+            InlineKeyboardMarkup=InlineKeyboardMarkup,
             InlineKeyboardButton=lambda text, callback_data: (text, callback_data),
         )
-        self.telebot.types.InlineKeyboardMarkup.add = lambda markup, *buttons: markup.buttons.extend(buttons)
         self.telebot_patch = patch.dict(sys.modules, {"telebot": self.telebot})
         self.telebot_patch.start()
         self.bot = FakeBot()
