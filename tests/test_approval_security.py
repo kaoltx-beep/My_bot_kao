@@ -79,6 +79,58 @@ class ApprovalSecurityTests(unittest.TestCase):
         )
         self.assertEqual(approval.get(approval_id)["status"], "expired")
 
+
+    def test_signed_grant_is_bound_to_tool_and_exact_params_and_one_use(self):
+        approval_id = self.make_request()
+        item = approval.consume(
+            approval_id, "approved", chat_id=-100123, user_id=456, now=1001
+        )
+        grant = item["approval_grant"]
+        self.assertTrue(
+            approval.validate_and_consume_grant(
+                grant, tool_name="mcp:read_status", params={"detail": "brief"}, now=1002
+            )
+        )
+        self.assertFalse(
+            approval.validate_and_consume_grant(
+                grant, tool_name="mcp:read_status", params={"detail": "brief"}, now=1002
+            )
+        )
+
+    def test_signed_grant_rejects_changed_tool_or_params(self):
+        approval_id = self.make_request()
+        item = approval.consume(
+            approval_id, "approved", chat_id=-100123, user_id=456, now=1001
+        )
+        grant = item["approval_grant"]
+        self.assertFalse(
+            approval.validate_and_consume_grant(
+                grant, tool_name="mcp:delete", params={"detail": "brief"}, now=1002
+            )
+        )
+        self.assertFalse(
+            approval.validate_and_consume_grant(
+                grant, tool_name="mcp:read_status", params={"detail": "all"}, now=1002
+            )
+        )
+
+    def test_approval_is_bound_to_original_telegram_message(self):
+        approval_id = self.make_request()
+        self.assertTrue(
+            approval.bind_message(
+                approval_id, chat_id=-100123, user_id=456, message_id=77
+            )
+        )
+        self.assertIsNone(
+            approval.consume(
+                approval_id, "approved", chat_id=-100123, user_id=456, message_id=78, now=1001
+            )
+        )
+        item = approval.consume(
+            approval_id, "approved", chat_id=-100123, user_id=456, message_id=77, now=1001
+        )
+        self.assertEqual(item["status"], "approved")
+
     def test_ttl_is_bounded(self):
         with self.assertRaises(ValueError):
             self.make_request(ttl_seconds=3600)
