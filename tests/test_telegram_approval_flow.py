@@ -55,7 +55,8 @@ class TelegramApprovalFlowTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.store_patch = patch.object(approval, "STORE", Path(self.tmp.name) / "approvals.json")
         self.store_patch.start()
-        self.config = types.SimpleNamespace(TELEGRAM_CHAT_ID=-100123)
+        self.config = types.ModuleType("config")
+        self.config.TELEGRAM_CHAT_ID = -100123
         self.config_patch = patch.dict(sys.modules, {"config": self.config})
         self.config_patch.start()
         self.telebot = types.ModuleType("telebot")
