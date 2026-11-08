@@ -32,4 +32,4 @@ jobs:
           python -m venv .venv-mcp
           .venv-mcp/bin/python -m pip install --upgrade pip
           .venv-mcp/bin/python -m pip install 'mcp>=2,<3'
-          PYTHONPATH="$GITHUB_WORKSPACE" .venv-mcp/bin/python -m unittest discover -s tests -p 'test_mcp_client_sdk.py' -v
+          PYTHONPATH="$GITHUB_WORKSPACE" .venv-mcp/bin/python -m unittest discover -s tests -p 'test_mcp_*.py' -v
