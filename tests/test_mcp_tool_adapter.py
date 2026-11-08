@@ -1,0 +1,63 @@
+import unittest
+from unittest.mock import AsyncMock, patch
+
+from core.executor import ToolExecutor
+from core.registry import ToolRegistry
+from mcp_tool_adapter import MCPToolAdapter
+
+
+class MCPToolAdapterTests(unittest.TestCase):
+    def make_adapter(self):
+        return MCPToolAdapter(
+            server_url="http://127.0.0.1:8000/mcp",
+            tool_name="read_status",
+            allowed_tools={"read_status"},
+            timeout_seconds=3,
+        )
+
+    def test_adapter_is_high_risk_and_requires_approval(self):
+        adapter = self.make_adapter()
+        self.assertEqual(adapter.metadata.risk_level, "high")
+        self.assertTrue(adapter.metadata.require_approval)
+
+    def test_direct_execute_cannot_bypass_executor(self):
+        result = self.make_adapter().execute()
+        self.assertFalse(result.success)
+        self.assertIn("ToolExecutor", result.error)
+
+    def test_executor_blocks_without_approval_and_does_not_call_mcp(self):
+        registry = ToolRegistry()
+        registry.register(self.make_adapter())
+        with patch("mcp_tool_adapter.call_server_tool", new_callable=AsyncMock) as call:
+            result = ToolExecutor(registry).execute("mcp:read_status", {})
+        self.assertFalse(result.success)
+        self.assertIn("requires approval", result.error)
+        call.assert_not_awaited()
+
+    def test_executor_passes_approval_to_adapter(self):
+        expected = {"tool_name": "read_status", "structured_content": {"result": 7}, "content": []}
+        registry = ToolRegistry()
+        registry.register(self.make_adapter())
+        with patch("mcp_tool_adapter.call_server_tool", new_callable=AsyncMock, return_value=expected) as call:
+            result = ToolExecutor(registry).execute("mcp:read_status", {"detail": "brief"}, approved=True)
+        self.assertTrue(result.success)
+        self.assertEqual(result.data, expected)
+        call.assert_awaited_once_with(
+            "http://127.0.0.1:8000/mcp",
+            "read_status",
+            {"detail": "brief"},
+            allowed_tools={"read_status"},
+            approved=True,
+        )
+
+    def test_adapter_rejects_tool_not_on_allowlist(self):
+        with self.assertRaises(ValueError):
+            MCPToolAdapter(
+                server_url="https://mcp.example.com/mcp",
+                tool_name="delete_everything",
+                allowed_tools={"read_status"},
+            )
+
+
+if __name__ == "__main__":
+    unittest.main()
