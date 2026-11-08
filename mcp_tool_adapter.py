@@ -46,9 +46,22 @@ class MCPToolAdapter(BaseTool):
         # Do not permit callers to bypass ToolExecutor's approval gate.
         return ToolResult(success=False, error="MCP tools must be invoked through ToolExecutor approval")
 
-    def execute_with_approval(self, *, approved: bool, **params: Any) -> ToolResult:
-        if not approved:
-            return ToolResult(success=False, error="MCP tool call requires explicit Jarvis approval")
+    def execute_with_approval(
+        self,
+        *,
+        approved: bool,
+        approval_grant: str | None = None,
+        **params: Any,
+    ) -> ToolResult:
+        if not approved or not approval_grant:
+            return ToolResult(success=False, error="MCP tool call requires a verified one-use approval grant")
+        from core.approval import validate_and_consume_grant
+        if not validate_and_consume_grant(
+            approval_grant,
+            tool_name=self.metadata.name,
+            params=params,
+        ):
+            return ToolResult(success=False, error="MCP approval grant is invalid, expired, mismatched, or already used")
         try:
             asyncio.get_running_loop()
         except RuntimeError:
