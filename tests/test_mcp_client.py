@@ -1,8 +1,12 @@
+import os
 import unittest
+from unittest.mock import patch
 
 from mcp_client import (
     MCPConfigurationError,
     _require_tool_permission,
+    _serialize_content_block,
+    _github_access_token,
     validate_server_url,
 )
 
@@ -20,6 +24,14 @@ class MCPClientSafetyTests(unittest.TestCase):
             "http://127.0.0.1:8000/mcp",
         )
 
+    def test_github_remote_endpoint_must_be_read_only(self):
+        self.assertEqual(
+            validate_server_url("https://api.githubcopilot.com/mcp/readonly"),
+            "https://api.githubcopilot.com/mcp/readonly",
+        )
+        with self.assertRaises(MCPConfigurationError):
+            validate_server_url("https://api.githubcopilot.com/mcp/")
+
     def test_remote_http_is_rejected(self):
         with self.assertRaises(MCPConfigurationError):
             validate_server_url("http://mcp.example.com/mcp")
@@ -35,6 +47,20 @@ class MCPClientSafetyTests(unittest.TestCase):
     def test_empty_url_is_rejected(self):
         with self.assertRaises(MCPConfigurationError):
             validate_server_url(" ")
+
+    def test_github_token_can_be_supplied_without_persisting_it(self):
+        with patch.dict(os.environ, {"GITHUB_PERSONAL_ACCESS_TOKEN": "unit-test-token"}):
+            self.assertEqual(_github_access_token(), "unit-test-token")
+
+    def test_content_serializer_preserves_text_blocks(self):
+        class TextBlock:
+            type = "text"
+            text = "ok"
+
+        self.assertEqual(
+            _serialize_content_block(TextBlock()),
+            {"type": "text", "text": "ok"},
+        )
 
     def test_tool_call_requires_explicit_approval(self):
         with self.assertRaises(PermissionError):

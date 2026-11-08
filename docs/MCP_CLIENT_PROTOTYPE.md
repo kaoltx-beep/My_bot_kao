@@ -2,14 +2,16 @@
 
 ## Current scope
 
-This is a disconnected prototype. It is **not** registered in Jarvis's default ToolRegistry, is not called by Telegram/FastAPI handlers, and does not start any MCP server automatically.
+This is a separately tested connection module. It is **not** registered in Jarvis's default ToolRegistry, is not called by Telegram/FastAPI handlers, and does not start an MCP server automatically.
 
-- Uses the official MCP Python SDK v2 client API: `from mcp import Client`.
-- Supports MCP Streamable HTTP URLs.
-- Requires HTTPS for remote servers. Plain HTTP is allowed only for loopback development.
+- Uses the official MCP Python SDK v2 Streamable HTTP client.
+- GitHub connects only to `https://api.githubcopilot.com/mcp/readonly`; non-read-only GitHub endpoint URLs are rejected before connecting.
+- GitHub credentials are read from `GITHUB_PERSONAL_ACCESS_TOKEN`, or from the existing local `gh auth token` login. Tokens stay in memory and are not written to files or logs.
+- Other remote servers require HTTPS. Plain HTTP is allowed only for loopback development.
 - Rejects URLs containing embedded credentials, query strings, or fragments.
-- Listing tools retrieves metadata only.
+- Listing tools retrieves metadata only and reports the server's read-only annotation.
 - Calling a tool requires an explicit tool-name allowlist and an approval decision.
+- MCP resource content is preserved in tool results (not reduced to text-only blocks).
 - Does not add an MCP dependency to production requirements or change any existing runtime configuration.
 
 ## Approval security prerequisite
@@ -76,14 +78,14 @@ Run the isolated MCP tests:
 python -m unittest discover -s tests -p 'test_mcp_*.py' -v
 ```
 
-The SDK integration test uses an in-memory MCP server. It does not connect to a remote endpoint or prove production connectivity.
+The SDK integration test uses an in-memory MCP server. A separate manual smoke test on the Termux device connected to the official GitHub read-only endpoint, listed 28 tools (all 28 marked read-only), and successfully called `get_me` and `get_file_contents`. This does not activate MCP in the running Jarvis service.
 
 ## Next steps before integration
 
 1. Complete the isolated Telegram approval-flow tests and MCP adapter grant tests.
 2. Run CI and review the complete callback-to-executor path.
-3. Test with an in-memory read-only MCP server only; do not use a remote endpoint until a separate approval.
-4. Keep production deployment, credentials, workflows, and the default registry unchanged until a separate approval.
+3. Review the new remote connection code and its read-only URL guard.
+4. Keep production deployment, Telegram handlers, workflows, credentials, and the default registry unchanged until a separate deployment approval.
 
 ## References
 
