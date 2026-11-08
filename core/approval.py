@@ -127,6 +127,29 @@ def create(
     return approval_id
 
 
+def bind_message(
+    approval_id: str,
+    *,
+    chat_id: int,
+    user_id: int,
+    message_id: int,
+) -> bool:
+    """Bind the pending approval to the exact Telegram message carrying its buttons."""
+    with _LOCK:
+        data = _load()
+        item = data.get(approval_id)
+        if (
+            not isinstance(item, dict)
+            or item.get("status") != "pending"
+            or item.get("chat_id") != int(chat_id)
+            or item.get("user_id") != int(user_id)
+        ):
+            return False
+        item["message_id"] = int(message_id)
+        _save(data)
+        return True
+
+
 def get(approval_id: str) -> dict[str, Any] | None:
     with _LOCK:
         item = _load().get(approval_id)
@@ -139,6 +162,7 @@ def consume(
     *,
     chat_id: int,
     user_id: int,
+    message_id: int | None = None,
     now: float | None = None,
 ) -> dict[str, Any] | None:
     """Atomically consume a pending approval only for its owner, before expiry."""
@@ -154,6 +178,8 @@ def consume(
         if not isinstance(item, dict) or item.get("status") != "pending":
             return None
         if item.get("chat_id") != int(chat_id) or item.get("user_id") != int(user_id):
+            return None
+        if item.get("message_id") is not None and item.get("message_id") != message_id:
             return None
         try:
             expires_at = float(item["expires_at"])
