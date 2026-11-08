@@ -2,7 +2,7 @@
 
 ## Current scope
 
-This is a disconnected prototype. It is **not** registered in Jarvis's default ToolRegistry, is not called by Telegram/FastAPI handlers, and does not start any MCP server automatically.
+This is an opt-in prototype. It is **not** registered in Jarvis's default ToolRegistry and is not active in the running Jarvis service. The Telegram approval callback and MCP adapter have been tested together against an in-memory MCP server, but no external MCP endpoint is configured or called.
 
 - Uses the official MCP Python SDK v2 client API: `from mcp import Client`.
 - Supports MCP Streamable HTTP URLs.
@@ -78,12 +78,19 @@ python -m unittest discover -s tests -p 'test_mcp_*.py' -v
 
 The SDK integration test uses an in-memory MCP server. It does not connect to a remote endpoint or prove production connectivity.
 
-## Next steps before integration
+## Verification status
 
-1. Complete the isolated Telegram approval-flow tests and MCP adapter grant tests.
-2. Run CI and review the complete callback-to-executor path.
-3. Test with an in-memory read-only MCP server only; do not use a remote endpoint until a separate approval.
-4. Keep production deployment, credentials, workflows, and the default registry unchanged until a separate approval.
+- Telegram callback tests cover owner mismatch, wrong chat, wrong originating message, rejection, and the successful approval path.
+- The end-to-end test sends a Telegram approval through the real ToolExecutor and MCP adapter to an in-memory read-only MCP server.
+- Latest CI: 59 main tests passed (4 skipped), 19 isolated MCP tests passed, and compile passed.
+- No remote MCP endpoint, production credentials, active workflow, or deployed service was used.
+
+## Remaining work before a real connection
+
+1. Review the identity and trust model for the specific external MCP provider.
+2. Configure a remote endpoint and credentials only through a secure secret store, after separate explicit approval.
+3. Map each remote tool to a risk level and allowlist it individually.
+4. Keep the default registry and production service unchanged until the live connection has passed a separate review.
 
 ## References
 
@@ -95,7 +102,7 @@ The SDK integration test uses an in-memory MCP server. It does not connect to a 
 `mcp_tool_adapter.py` exposes exactly one configured, allowlisted MCP tool through Jarvis's synchronous `BaseTool` contract.
 
 - Adapter metadata is always `high` risk and requires approval.
-- `ToolExecutor` passes its explicit `approved` decision only to adapters that implement `execute_with_approval`; existing tools retain their original `execute` call path.
+- `ToolExecutor` requires an opaque signed one-use approval grant for approval-aware adapters; a caller-supplied `approved=True` alone is rejected. Existing tools retain their original `execute` call path.
 - Calling the adapter's ordinary `execute` method directly is rejected.
 - The adapter is not added to `build_default_registry()`; an operator must explicitly construct and register it in a separate/opt-in registry.
 - The adapter uses a bounded async timeout and refuses to run inside an already active event loop. An async-native integration is required for event-loop handlers.
