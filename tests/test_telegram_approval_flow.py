@@ -73,9 +73,12 @@ class TelegramApprovalFlowTests(unittest.TestCase):
         self.telebot_patch.start()
         self.bot = FakeBot()
         self.tools = FakeToolSystem()
+        self.allowed_chat_patch = patch.object(telegram, "_allowed_chat_id", return_value=-100123)
+        self.allowed_chat_patch.start()
         telegram.register_handlers(self.bot, self.tools)
 
     def tearDown(self):
+        self.allowed_chat_patch.stop()
         self.telebot_patch.stop()
         self.config_patch.stop()
         self.store_patch.stop()
