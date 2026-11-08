@@ -5,7 +5,10 @@ from __future__ import annotations
 import threading
 from typing import Any
 
-from .chat import process_message
+def process_message(text: str) -> dict[str, Any]:
+    """Load the FastAPI-backed chat pipeline only when a normal chat message arrives."""
+    from .chat import process_message as _process_message
+    return _process_message(text)
 
 
 def _allowed_chat_id() -> int:
