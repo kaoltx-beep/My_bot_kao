@@ -1,17 +1,22 @@
 """Integration checks against the official MCP Python SDK v2.
 
 The SDK Client is connected to an in-memory MCPServer, so tests need no
-network listener, credentials, production service, or external MCP endpoint.
+network listener, credentials, or external MCP endpoint.
 """
 import unittest
 from unittest.mock import patch
 
-from mcp import Client
-from mcp.server import MCPServer
+try:
+    from mcp import Client
+    from mcp.server import MCPServer
+except ImportError:  # The project test environment intentionally excludes MCP.
+    Client = None
+    MCPServer = None
 
 from mcp_client import call_server_tool, list_server_tools
 
 
+@unittest.skipIf(Client is None, "MCP SDK tests run in the isolated MCP environment")
 class MCPClientSDKIntegrationTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.server = MCPServer("Jarvis MCP test server")
