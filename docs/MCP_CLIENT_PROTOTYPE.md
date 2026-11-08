@@ -9,8 +9,20 @@ This is a disconnected prototype. It is **not** registered in Jarvis's default T
 - Requires HTTPS for remote servers. Plain HTTP is allowed only for loopback development.
 - Rejects URLs containing embedded credentials, query strings, or fragments.
 - Listing tools retrieves metadata only.
-- Calling a tool requires both `approved=True` (to be supplied only after Jarvis's existing approval flow) and an explicit tool-name allowlist.
+- Calling a tool requires an explicit tool-name allowlist and an approval decision.
 - Does not add an MCP dependency to production requirements or change any existing runtime configuration.
+
+## Approval security prerequisite
+
+`core/approval.py` now provides one-use approval records bound to both the originating Telegram chat ID and the requesting Telegram user ID.
+
+- Approval records expire after 5 minutes by default; callers may configure a shorter TTL, capped at 15 minutes.
+- A different chat or user cannot consume the request.
+- Expired and legacy records without an expiry timestamp fail closed.
+- A request can be consumed only once, and only with status `approved` or `rejected`.
+- The approval-store tests use a temporary file and do not touch production approval data.
+
+**Important integration status:** the current `handlers/telegram.py` only accepts messages from the configured private chat and does not register an approval callback handler. The approval store is a hardened primitive, not a complete Telegram approval workflow. Do not pass `approved=True` to MCP execution until a callback handler has been implemented and tested to call `consume(..., chat_id=..., user_id=...)` and then execute only the exact stored tool and parameters. The legacy `tools/integrate_approval.py` patcher is not the active modular Telegram handler.
 
 ## Optional local installation
 
@@ -34,7 +46,7 @@ async def inspect():
     tools = await list_server_tools("http://127.0.0.1:8000/mcp")
     print(tools)  # metadata only
 
-    # Only after the user approves this exact action:
+    # This call is for the in-memory test harness only.
     result = await call_server_tool(
         "http://127.0.0.1:8000/mcp",
         "read_status",
@@ -49,20 +61,26 @@ asyncio.run(inspect())
 
 ## Verification
 
-Run the isolated safety tests without installing the MCP SDK:
+Run the approval-store tests:
 
 ```bash
-python -m unittest discover -s tests -p 'test_mcp_client.py' -v
+python -m unittest tests.test_approval_security -v
 ```
 
-These tests cover URL restrictions, explicit approval, and the tool allowlist. They do not claim that a real MCP server connection has been tested.
+Run the isolated MCP tests:
+
+```bash
+python -m unittest discover -s tests -p 'test_mcp_*.py' -v
+```
+
+The SDK integration test uses an in-memory MCP server. It does not connect to a remote endpoint or prove production connectivity.
 
 ## Next steps before integration
 
-1. Run the unit tests in the repository's actual CI/runtime environment.
-2. Install the SDK only in an isolated test environment and connect to a harmless local read-only MCP server.
-3. Verify tool metadata, error handling, timeout behavior, and cancellation.
-4. Add an adapter into Jarvis's ToolRegistry only after review. Map each remote tool to a risk level; never infer low risk from a tool name or description.
+1. Implement a modular Telegram approval callback with chat/user binding and expiry checks.
+2. Add handler tests for wrong user, wrong chat, expired requests, replay, and exact stored tool/arguments.
+3. Add an approval-grant boundary so a plain boolean cannot be treated as proof of user consent.
+4. Test the callback and MCP adapter together using only an in-memory read-only server.
 5. Keep production deployment, credentials, workflows, and the default registry unchanged until a separate approval.
 
 ## References
@@ -79,10 +97,4 @@ These tests cover URL restrictions, explicit approval, and the tool allowlist. T
 - Calling the adapter's ordinary `execute` method directly is rejected.
 - The adapter is not added to `build_default_registry()`; an operator must explicitly construct and register it in a separate/opt-in registry.
 - The adapter uses a bounded async timeout and refuses to run inside an already active event loop. An async-native integration is required for event-loop handlers.
-- Tests mock the MCP client call; they do not connect to a remote server or change production configuration.
-
-Run adapter tests with:
-
-```bash
-python -m unittest tests.test_mcp_tool_adapter -v
-```
+- Tests use an in-memory MCP server or mock calls; they do not connect to a remote server or change production configuration.
