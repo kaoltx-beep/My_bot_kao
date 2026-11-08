@@ -26,8 +26,19 @@ class JarvisToolSystem:
             return None
         return parse_tool_params(route.tool_name, text)
 
-    def execute(self, name: str, params: dict | None = None, approved: bool = False):
-        return self.executor.execute(name, params=params, approved=approved)
+    def execute(
+        self,
+        name: str,
+        params: dict | None = None,
+        approved: bool = False,
+        approval_grant: str | None = None,
+    ):
+        return self.executor.execute(
+            name,
+            params=params,
+            approved=approved,
+            approval_grant=approval_grant,
+        )
 
     def execute_text(self, text: str, approved: bool = False):
         call = self.parse(text)
