@@ -7,11 +7,11 @@ from fastapi import APIRouter
 router = APIRouter()
 
 
-@router.api_route("/health", methods=["GET", "HEAD"])
+@router.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@router.api_route("/", methods=["GET", "HEAD"])
+@router.get("/")
 def root() -> dict[str, str]:
     return {"status": "ok"}

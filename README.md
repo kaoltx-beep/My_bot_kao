@@ -1,133 +1,62 @@
-# Jarvis AI Assistant
+# Jarvis AI Assistant — Termux Full Build
 
-ผู้ช่วย AI ส่วนตัวทำงานผ่าน Telegram บน Android (Termux) และ Cloud (Railway)
+รุ่นนี้ใช้ซอร์สจาก Jarvis ตัวเต็มใน Termux เป็นหลัก โดยเก็บการเปลี่ยนแปลงไว้ใน branch แยก ไม่ทับ `main`
 
-## Features
+## ระบบที่รวมอยู่
 
-- 🤖 **Telegram Bot** — รับคำสั่งและตอบโต้ผ่าน Telegram
-- 🧠 **Groq AI** — ใช้ llama-3.1-8b-instant สำหรับการตอบสนอง (JSON mode)
-- 🔌 **Plugin System** — battery, expense, task, reminder, news, work, memory, youtube
-- 📊 **Google Sheets** — บันทึกงาน, ค่าใช้จ่าย, memory ลง Sheets
-- 📱 **MacroDroid** — ควบคุม Android ผ่าน webhook
-- 🎤 **Voice** (Termux only) — TTS/STT บน Android
-- 🖥️ **Dashboard** — Web dashboard สำหรับดูสถานะ
+- FastAPI: health check และ chat API
+- Telegram Bot: เปิด polling เมื่อกำหนด `TELEGRAM_POLLING_ENABLED=1`
+- AI Gateway: Groq หรือ Cloudflare Workers AI ตามค่า `AI_PROVIDER`
+- LINE webhook
+- Field Ops / FOA และระบบจัดการรูปภาพ
+- Tool system, memory และ dashboard
+- ชุดทดสอบของโปรเจกต์
 
----
+## เริ่มใช้งานในเครื่อง
 
-## Quick Start
-
-### 1. Clone the repository
+ติดตั้ง dependencies:
 
 ```bash
-git clone https://github.com/kaoltx-beep/My_bot_kao.git
-cd My_bot_kao
+python -m pip install -r requirements.txt
 ```
 
-### 2. Install dependencies
+ตั้งค่าตัวแปรแวดล้อมในเครื่องหรือในระบบโฮสต์ ห้ามอัปโหลด `.env` หรือไฟล์ credential ขึ้น GitHub
+
+เริ่ม API:
 
 ```bash
-pip install -r requirements.txt
+uvicorn run:app --host 0.0.0.0 --port 8000
 ```
 
-### 3. Configure environment variables
+เปิด Telegram polling ด้วย `TELEGRAM_POLLING_ENABLED=1` เฉพาะเมื่อกำหนด Telegram token แล้ว
+
+## ทดสอบ
 
 ```bash
-cp .env.example .env
-# แก้ไขค่าใน .env ด้วย editor ที่ชอบ
+python -m pytest -q
 ```
 
-ค่าที่ต้องกำหนด:
+## Deploy บน Render
 
-| Variable | ที่มา | จำเป็น |
-|----------|------|-------|
-| `TELEGRAM_TOKEN` | [@BotFather](https://t.me/BotFather) | ✅ |
-| `TELEGRAM_CHAT_ID` | [@userinfobot](https://t.me/userinfobot) | ✅ |
-| `GROQ_API_KEY` | [console.groq.com](https://console.groq.com) | ✅ |
-| `MACRODROID_WEBHOOK_URL` | MacroDroid app | ❌ optional |
-| `GOOGLE_APPLICATION_CREDENTIALS` | Google Cloud Console | ❌ optional |
-| `DASHBOARD_TOKEN` | ตั้งเองได้เลย | ❌ optional |
+Branch สำหรับตรวจสอบและเตรียม deploy:
 
-### 4. Google Sheets (optional)
+`termux-full-2026-11-09`
 
-ถ้าต้องการใช้ work logging / expense backup:
+ไฟล์ `deploy/termux_source_bundle.tar.gz.b64` เป็นชุดซอร์สที่คัดเฉพาะไฟล์โค้ดและเอกสาร 157 ไฟล์ ส่วน `prestart.py` จะตรวจ path และแตกชุดซอร์สก่อนเริ่มเว็บเซิร์ฟเวอร์
 
-1. สร้าง Google Cloud project
-2. เปิด Google Sheets API และ Google Drive API
-3. สร้าง Service Account และ download JSON key
-4. บันทึกไฟล์เป็น `service_account.json` ในโฟลเดอร์โปรเจกต์
-5. Share spreadsheet "Jarvis_Memory" ให้กับ service account email
+กำหนด Environment Variables ใน Render แทนการอัปโหลด `.env` เช่น:
 
-### 5. Run
+- `AI_PROVIDER`
+- `GROQ_API_KEY` และ `GROQ_MODEL` หรือค่าของ Cloudflare ตาม provider ที่เลือก
+- `TELEGRAM_TOKEN`
+- `TELEGRAM_POLLING_ENABLED`
+- ค่าของ LINE Messaging API หากต้องการเปิด LINE webhook
+- ค่าการเชื่อมต่อ Google Sheets หากเปิดใช้งาน
 
-```bash
-python run.py
-```
+**ข้อจำกัดก่อนใช้งานจริง:** SQLite และไฟล์ข้อมูลในเครื่องไม่ถูกนำขึ้น GitHub และพื้นที่ดิสก์ของบริการฟรีอาจไม่ถาวร จึงยังไม่ควรใช้ Render เป็นที่เก็บความจำ/ฐานข้อมูลหลัก จนกว่าจะกำหนดที่เก็บข้อมูลถาวรและทดสอบการกู้คืนแล้ว
 
----
+## ความปลอดภัย
 
-## Deployment (Railway)
-
-โปรเจกต์นี้พร้อม deploy บน Railway:
-
-1. สร้าง project ใหม่ใน [Railway](https://railway.app)
-2. Connect GitHub repository นี้
-3. ตั้ง environment variables ใน Railway dashboard
-4. Railway จะ deploy อัตโนมัติจาก `Procfile`
-
----
-
-## Architecture
-
-```
-run.py  (entry point)
-├── Telegram Bot (pyTeleBot)
-├── Groq AI (llama-3.1-8b-instant)
-├── Plugin System (plugins/)
-├── Intent Router (intent_router.py)
-├── Memory (memory_manager_v2.py + memory_store.py)
-├── FastAPI (/status, /pulse, /dashboard, /webhook/feedback)
-└── Reminder Worker (background thread)
-```
-
-สำหรับ architecture แบบละเอียด ดู [PROJECT_STATUS.md](PROJECT_STATUS.md)
-
----
-
-## Plugin Commands (ภาษาไทย)
-
-| Plugin | ตัวอย่างคำสั่ง |
-|--------|--------------|
-| battery | "แบตเหลือเท่าไหร่" |
-| expense | "กาแฟ 50", "ดูรายจ่าย", "รายจ่ายเดือนนี้" |
-| task | "บันทึกงาน ส่งงานพรุ่งนี้" |
-| reminder | "ตั้งเตือน 18:00 ออกกำลังกาย" |
-| news | "ข่าววันนี้" |
-| memory | "จำว่าฉันชอบกาแฟดำ", "ค้นหา กาแฟ" |
-| youtube | "เปิด YouTube" |
-
----
-
-## Stack
-
-- Python 3.13
-- pyTeleBot (Telegram)
-- Groq API (AI)
-- FastAPI + uvicorn (Web)
-- SQLite (local DB)
-- gspread (Google Sheets)
-- python-dotenv
-
----
-
-## Security Notes
-
-- Bot ตอบสนองเฉพาะ `TELEGRAM_CHAT_ID` ที่กำหนดเท่านั้น
-- ห้าม commit ไฟล์ `.env` หรือ `service_account.json`
-- Dashboard `/status` endpoint ป้องกันด้วย `DASHBOARD_TOKEN` (ถ้าตั้งค่า)
-- ดูปัญหา security ทั้งหมดใน [TODO.md](TODO.md)
-
----
-
-## Roadmap
-
-ดู [ROADMAP.md](ROADMAP.md) และ [TODO.md](TODO.md) สำหรับแผนพัฒนาต่อ
+- ไม่รวม `.env`, ฐานข้อมูล, Google credentials, token files, logs หรือไฟล์ backup ใน source bundle
+- ห้ามใส่ API key หรือ Telegram/LINE token ลงในซอร์สโค้ด
+- ไม่ควรเปิด Telegram polling ซ้ำสองเครื่องด้วย token เดียวกัน
