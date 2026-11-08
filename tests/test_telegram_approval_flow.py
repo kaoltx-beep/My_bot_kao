@@ -103,7 +103,12 @@ class TelegramApprovalFlowTests(unittest.TestCase):
         )
 
     def test_high_risk_message_requests_approval_without_execution(self):
-        self.bot.message_handler_fn(self.make_message())
+        message = self.make_message()
+        self.assertEqual(telegram._allowed_chat_id(), -100123)
+        self.assertEqual(int(message.chat.id), -100123)
+        self.assertEqual(int(message.from_user.id), 456)
+        self.assertIsNotNone(self.bot.message_handler_fn)
+        self.bot.message_handler_fn(message)
         self.assertEqual(self.tools.executions, [])
         self.assertEqual(len(self.bot.sent), 1)
         approval_id = self.bot.sent[0][2].buttons[0][1].split(":")[-1]
