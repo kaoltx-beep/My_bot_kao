@@ -59,5 +59,45 @@ class MCPToolAdapterTests(unittest.TestCase):
             )
 
 
+try:
+    from mcp import Client
+    from mcp.server import MCPServer
+except ImportError:
+    Client = None
+    MCPServer = None
+
+
+@unittest.skipIf(Client is None, "MCP SDK integration runs in isolated environment")
+class MCPToolAdapterSDKIntegrationTests(unittest.TestCase):
+    def test_approved_adapter_calls_in_memory_read_only_mcp_server(self):
+        server = MCPServer("Jarvis read-only adapter test")
+
+        @server.tool()
+        def read_status() -> int:
+            """Read a harmless status value; this tool does not mutate state."""
+            return 7
+
+        registry = ToolRegistry()
+        registry.register(
+            MCPToolAdapter(
+                server_url="http://127.0.0.1:8000/mcp",
+                tool_name="read_status",
+                allowed_tools={"read_status"},
+                timeout_seconds=3,
+            )
+        )
+
+        with patch("mcp.Client", side_effect=lambda _url: Client(server, raise_exceptions=True)):
+            result = ToolExecutor(registry).execute(
+                "mcp:read_status",
+                {},
+                approved=True,
+            )
+
+        self.assertTrue(result.success, result.error)
+        self.assertEqual(result.data["tool_name"], "read_status")
+        self.assertEqual(result.data["structured_content"], {"result": 7})
+
+
 if __name__ == "__main__":
     unittest.main()
