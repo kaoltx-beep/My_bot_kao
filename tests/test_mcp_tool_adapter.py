@@ -10,6 +10,17 @@ from core.registry import ToolRegistry
 from mcp_tool_adapter import MCPToolAdapter
 
 
+def _make_grant(params):
+    approval.STORE.parent.mkdir(parents=True, exist_ok=True)
+    approval_id = approval.create(
+        "mcp:read_status", params, chat_id=-100123, user_id=456
+    )
+    item = approval.consume(
+        approval_id, "approved", chat_id=-100123, user_id=456
+    )
+    return item["approval_grant"]
+
+
 class MCPToolAdapterTests(unittest.TestCase):
     def make_adapter(self):
         return MCPToolAdapter(
@@ -49,22 +60,12 @@ class MCPToolAdapterTests(unittest.TestCase):
         self.assertIn("approval grant required", result.error)
         call.assert_not_awaited()
 
-    def _grant(self, params):
-        approval.STORE.parent.mkdir(parents=True, exist_ok=True)
-        approval_id = approval.create(
-            "mcp:read_status", params, chat_id=-100123, user_id=456
-        )
-        item = approval.consume(
-            approval_id, "approved", chat_id=-100123, user_id=456
-        )
-        return item["approval_grant"]
-
     def test_executor_passes_verified_approval_grant_to_adapter(self):
         expected = {"tool_name": "read_status", "structured_content": {"result": 7}, "content": []}
         with tempfile.TemporaryDirectory() as tmp:
             with patch.object(approval, "STORE", Path(tmp) / "approvals.json"):
                 params = {"detail": "brief"}
-                grant = self._grant(params)
+                grant = _make_grant(params)
                 registry = ToolRegistry()
                 registry.register(self.make_adapter())
                 with patch("mcp_tool_adapter.call_server_tool", new_callable=AsyncMock, return_value=expected) as call:
@@ -120,7 +121,7 @@ class MCPToolAdapterSDKIntegrationTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             with patch.object(approval, "STORE", Path(tmp) / "approvals.json"):
-                grant = self._grant({})
+                grant = _make_grant({})
                 with patch("mcp.Client", side_effect=lambda _url: Client(server, raise_exceptions=True)):
                     result = ToolExecutor(registry).execute(
                         "mcp:read_status",
