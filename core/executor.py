@@ -25,7 +25,11 @@ class ToolExecutor:
 
         started = time.perf_counter()
         try:
-            result = tool.execute(**(params or {}))
+            approved_executor = getattr(tool, "execute_with_approval", None)
+            if callable(approved_executor):
+                result = approved_executor(approved=approved, **(params or {}))
+            else:
+                result = tool.execute(**(params or {}))
             result.duration_ms = int((time.perf_counter() - started) * 1000)
             return result
         except Exception as exc:
