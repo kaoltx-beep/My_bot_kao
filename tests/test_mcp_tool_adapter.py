@@ -1,5 +1,9 @@
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
+
+from core import approval
 
 from core.executor import ToolExecutor
 from core.registry import ToolRegistry
@@ -34,15 +38,42 @@ class MCPToolAdapterTests(unittest.TestCase):
         self.assertIn("requires approval", result.error)
         call.assert_not_awaited()
 
-    def test_executor_passes_approval_to_adapter(self):
-        expected = {"tool_name": "read_status", "structured_content": {"result": 7}, "content": []}
+    def test_boolean_approval_without_grant_is_rejected(self):
         registry = ToolRegistry()
         registry.register(self.make_adapter())
-        with patch("mcp_tool_adapter.call_server_tool", new_callable=AsyncMock, return_value=expected) as call:
-            result = ToolExecutor(registry).execute("mcp:read_status", {"detail": "brief"}, approved=True)
-        self.assertTrue(result.success)
-        self.assertEqual(result.data, expected)
-        call.assert_awaited_once_with(
+        with patch("mcp_tool_adapter.call_server_tool", new_callable=AsyncMock) as call:
+            result = ToolExecutor(registry).execute(
+                "mcp:read_status", {"detail": "brief"}, approved=True
+            )
+        self.assertFalse(result.success)
+        self.assertIn("approval grant required", result.error)
+        call.assert_not_awaited()
+
+    def _grant(self, params):
+        approval.STORE.parent.mkdir(parents=True, exist_ok=True)
+        approval_id = approval.create(
+            "mcp:read_status", params, chat_id=-100123, user_id=456
+        )
+        item = approval.consume(
+            approval_id, "approved", chat_id=-100123, user_id=456
+        )
+        return item["approval_grant"]
+
+    def test_executor_passes_verified_approval_grant_to_adapter(self):
+        expected = {"tool_name": "read_status", "structured_content": {"result": 7}, "content": []}
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(approval, "STORE", Path(tmp) / "approvals.json"):
+                params = {"detail": "brief"}
+                grant = self._grant(params)
+                registry = ToolRegistry()
+                registry.register(self.make_adapter())
+                with patch("mcp_tool_adapter.call_server_tool", new_callable=AsyncMock, return_value=expected) as call:
+                    result = ToolExecutor(registry).execute(
+                        "mcp:read_status", params, approved=True, approval_grant=grant
+                    )
+                self.assertTrue(result.success)
+                self.assertEqual(result.data, expected)
+                call.assert_awaited_once_with(
             "http://127.0.0.1:8000/mcp",
             "read_status",
             {"detail": "brief"},
@@ -87,12 +118,16 @@ class MCPToolAdapterSDKIntegrationTests(unittest.TestCase):
             )
         )
 
-        with patch("mcp.Client", side_effect=lambda _url: Client(server, raise_exceptions=True)):
-            result = ToolExecutor(registry).execute(
-                "mcp:read_status",
-                {},
-                approved=True,
-            )
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(approval, "STORE", Path(tmp) / "approvals.json"):
+                grant = self._grant({})
+                with patch("mcp.Client", side_effect=lambda _url: Client(server, raise_exceptions=True)):
+                    result = ToolExecutor(registry).execute(
+                        "mcp:read_status",
+                        {},
+                        approved=True,
+                        approval_grant=grant,
+                    )
 
         self.assertTrue(result.success, result.error)
         self.assertEqual(result.data["tool_name"], "read_status")
