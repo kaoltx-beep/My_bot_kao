@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import json
 import secrets
 import time
@@ -12,6 +15,8 @@ STORE = ROOT / "data" / "tool_approvals.json"
 _LOCK = Lock()
 DEFAULT_TTL_SECONDS = 300
 MAX_TTL_SECONDS = 900
+_GRANT_SECRET = secrets.token_bytes(32)
+_USED_GRANTS: set[str] = set()
 
 
 def _load() -> dict[str, Any]:
@@ -29,6 +34,61 @@ def _save(data: dict[str, Any]) -> None:
     tmp = STORE.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     tmp.replace(STORE)
+
+
+def _canonical(value: Any) -> bytes:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+def _issue_grant(item: dict[str, Any]) -> str:
+    payload = {
+        "grant_id": secrets.token_urlsafe(18),
+        "tool": item["tool"],
+        "params": item["params"],
+        "chat_id": item["chat_id"],
+        "user_id": item["user_id"],
+        "expires_at": item["expires_at"],
+    }
+    encoded = base64.urlsafe_b64encode(_canonical(payload)).decode("ascii").rstrip("=")
+    signature = hmac.new(_GRANT_SECRET, encoded.encode("ascii"), hashlib.sha256).hexdigest()
+    return encoded + "." + signature
+
+
+def validate_and_consume_grant(
+    grant: str | None,
+    *,
+    tool_name: str,
+    params: dict[str, Any],
+    now: float | None = None,
+) -> bool:
+    """Validate an opaque, one-use grant created only by consume()."""
+    if not isinstance(grant, str) or "." not in grant:
+        return False
+    encoded, supplied_signature = grant.rsplit(".", 1)
+    expected = hmac.new(_GRANT_SECRET, encoded.encode("ascii"), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(supplied_signature, expected):
+        return False
+    try:
+        padded = encoded + "=" * (-len(encoded) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")))
+    except (ValueError, UnicodeError, json.JSONDecodeError):
+        return False
+    current_time = time.time() if now is None else float(now)
+    if payload.get("tool") != tool_name or _canonical(payload.get("params")) != _canonical(params):
+        return False
+    try:
+        if current_time >= float(payload["expires_at"]):
+            return False
+    except (KeyError, TypeError, ValueError):
+        return False
+    grant_id = payload.get("grant_id")
+    if not isinstance(grant_id, str) or not grant_id:
+        return False
+    with _LOCK:
+        if grant_id in _USED_GRANTS:
+            return False
+        _USED_GRANTS.add(grant_id)
+    return True
 
 
 def create(
@@ -98,7 +158,6 @@ def consume(
         try:
             expires_at = float(item["expires_at"])
         except (KeyError, TypeError, ValueError):
-            # Legacy approval records without expiry are invalid and fail closed.
             item["status"] = "expired"
             _save(data)
             return None
@@ -109,5 +168,8 @@ def consume(
 
         item["status"] = status
         item["consumed_at"] = current_time
+        result = dict(item)
+        if status == "approved":
+            result["approval_grant"] = _issue_grant(item)
         _save(data)
-        return dict(item)
+        return result
