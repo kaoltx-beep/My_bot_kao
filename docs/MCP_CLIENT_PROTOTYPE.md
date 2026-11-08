@@ -69,3 +69,20 @@ These tests cover URL restrictions, explicit approval, and the tool allowlist. T
 
 - Official SDK: https://github.com/modelcontextprotocol/python-sdk
 - Client documentation: https://py.sdk.modelcontextprotocol.io/client/
+
+## Opt-in Jarvis adapter
+
+`mcp_tool_adapter.py` exposes exactly one configured, allowlisted MCP tool through Jarvis's synchronous `BaseTool` contract.
+
+- Adapter metadata is always `high` risk and requires approval.
+- `ToolExecutor` passes its explicit `approved` decision only to adapters that implement `execute_with_approval`; existing tools retain their original `execute` call path.
+- Calling the adapter's ordinary `execute` method directly is rejected.
+- The adapter is not added to `build_default_registry()`; an operator must explicitly construct and register it in a separate/opt-in registry.
+- The adapter uses a bounded async timeout and refuses to run inside an already active event loop. An async-native integration is required for event-loop handlers.
+- Tests mock the MCP client call; they do not connect to a remote server or change production configuration.
+
+Run adapter tests with:
+
+```bash
+python -m unittest tests.test_mcp_tool_adapter -v
+```
