@@ -8,6 +8,7 @@ from handlers.telegram import register_handlers
 class FakeBot:
     def __init__(self):
         self.handler = None
+        self.callback_handler = None
         self.sent = []
 
     def message_handler(self, **kwargs):
@@ -16,12 +17,22 @@ class FakeBot:
             return fn
         return decorator
 
+    def callback_query_handler(self, **kwargs):
+        def decorator(fn):
+            self.callback_handler = fn
+            return fn
+        return decorator
+
     def send_message(self, chat_id, text):
         self.sent.append((chat_id, text))
 
 
 def make_message(chat_id, text="hello"):
-    return SimpleNamespace(chat=SimpleNamespace(id=chat_id), text=text)
+    return SimpleNamespace(
+        chat=SimpleNamespace(id=chat_id),
+        from_user=SimpleNamespace(id=456),
+        text=text,
+    )
 
 
 class TelegramAccessControlTests(unittest.TestCase):
