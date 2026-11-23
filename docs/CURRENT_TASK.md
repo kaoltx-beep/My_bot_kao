@@ -4,18 +4,19 @@ Restore Telegram chat ID config compatibility
 
 Progress
 
-90%
+100%
 
 Completed
 
 ✔ Add TELEGRAM_CHAT_ID environment setting with safe default "0"
 ✔ Preserve fail-closed Telegram allow-list behavior
-✔ Identify three CI errors caused by missing config.TELEGRAM_CHAT_ID
+✔ Fix the missing config.TELEGRAM_CHAT_ID attribute reported by CI
+✔ GitHub Actions project tests passed: 62 tests, 4 skipped
+✔ MCP SDK integration tests passed: 22 tests
 
 Remaining
 
-- Verify the GitHub Actions run triggered by this commit
-- Confirm Telegram security tests pass
+None for this task.
 
 Last Update
 
