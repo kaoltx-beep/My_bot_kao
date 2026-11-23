@@ -6,6 +6,8 @@ Dashboard
 
 Google Sheets
 
+Verify Telegram access-control CI after restoring config.TELEGRAM_CHAT_ID
+
 MEDIUM
 
 OCR
