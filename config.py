@@ -5,6 +5,8 @@ SERVICE_ACCOUNT_FILE = os.path.join(SECRETS_DIR, 'service_account.json')
 SHEETS_CONFIG_FILE = os.path.join(SECRETS_DIR, 'sheets_config.json')
 
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
+# Keep the allow-list unset by default; handlers fail closed when it is 0.
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "0")
 
 MACRODROID_WEBHOOK_URL = os.getenv("MACRODROID_WEBHOOK_URL")
 
