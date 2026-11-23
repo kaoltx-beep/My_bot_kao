@@ -2,19 +2,17 @@ NEXT AI
 
 Previous Task
 
-Fix Groq 413
+Restore Telegram chat ID config compatibility
 
 Current Status
 
-70%
+100% complete. GitHub Actions passed 62 project tests (4 skipped) and 22 MCP SDK integration tests.
 
 Next Step
 
-Reduce Context
-
-Test Telegram
-
-Commit
+Review PR #17 deployment readiness.
+Confirm production secrets and persistent storage requirements before deployment.
+Keep PR #17 in Draft; do not merge without explicit approval.
 
 Do Not Touch
 

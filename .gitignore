@@ -1,27 +1,38 @@
-# ─── Python bytecode ────────────────────────────────────────────────────────
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.pyc
+.pytest_cache/
+.venv/
+venv/
 
-# ─── Environment / secrets ──────────────────────────────────────────────────
+# Secrets and local configuration
 .env
 .env.*
 !.env.example
+credentials/
+credentials.json
+service_account.json
+token.json
+token.pickle
+*.pem
+*.key
+.secrets/
 
-# ─── Databases ──────────────────────────────────────────────────────────────
+# Databases and user data
 *.db
 *.db-shm
 *.db-wal
 *.sqlite
 *.sqlite3
 /data/
+data/
 
-# ─── Log files ──────────────────────────────────────────────────────────────
+# Logs and backups
 *.log
 logs/
-
-# ─── Backup / scratch files ─────────────────────────────────────────────────
+backups/
 *.bak
 *.backup
 *.before_*
@@ -30,32 +41,17 @@ logs/
 *.error
 *.old
 *.youtube_working
-run.py.toolbridge_backup_*
-run.py.approval_backup_*
 
-# ─── Binary / media assets ──────────────────────────────────────────────────
+# Binary/media and generated files
 *.mp3
 *.wav
 *.ogg
 jarvis
-
-# ─── Google / OAuth credentials ──────────────────────────────────────────────
-service_account.json
-credentials/
-credentials.json
-token.json
-token.pickle
-*.pem
-*.key
-
-# ─── OS ─────────────────────────────────────────────────────────────────────
-.DS_Store
-Thumbs.db
-
-# ─── IDE ────────────────────────────────────────────────────────────────────
-.vscode/
-.idea/
-
-# ─── Build artifacts ─────────────────────────────────────────────────────────
 dist/
 build/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
