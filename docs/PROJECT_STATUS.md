@@ -17,7 +17,8 @@ Current Issue
 
 Groq 413 (Mitigated by context limiting, model is `llama-3.1-8b-instant`)
 Dashboard Authentication (Implemented for /pulse and /status routes)
-Telegram CI compatibility: the PR #17 workflow exposed three Telegram security test errors because config.TELEGRAM_CHAT_ID was missing. A safe environment-backed setting with default "0" has been committed to the PR branch; CI verification is pending.
+
+Telegram CI compatibility is resolved on branch `termux-full-2026-11-09`. GitHub Actions passed 62 project tests (4 skipped) and 22 MCP SDK integration tests after restoring the environment-backed `config.TELEGRAM_CHAT_ID` setting with default `0`.
 
 Current Model
 
