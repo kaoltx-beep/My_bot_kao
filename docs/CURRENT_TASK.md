@@ -1,19 +1,22 @@
 Task
 
-Implement Dashboard Authentication
+Restore Telegram chat ID config compatibility
 
 Progress
 
-100%
+90%
 
 Completed
 
-✔ Apply authentication to /pulse and /status routes
-✔ Test all existing endpoints
+✔ Add TELEGRAM_CHAT_ID environment setting with safe default "0"
+✔ Preserve fail-closed Telegram allow-list behavior
+✔ Identify three CI errors caused by missing config.TELEGRAM_CHAT_ID
 
 Remaining
 
+- Verify the GitHub Actions run triggered by this commit
+- Confirm Telegram security tests pass
 
 Last Update
 
-2026-07-17
+2026-11-24
