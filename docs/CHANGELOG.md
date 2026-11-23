@@ -16,4 +16,4 @@ Implement Dashboard Authentication for `/pulse` and `/status` routes.
 
 
 2026-11-24
-Restore `config.TELEGRAM_CHAT_ID` from the `TELEGRAM_CHAT_ID` environment variable with a safe default of `0`, preserving fail-closed Telegram access control and fixing the missing configuration attribute reported by CI.
+Restore `config.TELEGRAM_CHAT_ID` from the `TELEGRAM_CHAT_ID` environment variable with a safe default of `0`, preserving fail-closed Telegram access control and fixing the missing configuration attribute reported by CI. GitHub Actions passed 62 project tests (4 skipped) and 22 MCP SDK integration tests.
