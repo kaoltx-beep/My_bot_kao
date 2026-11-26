@@ -1,0 +1,7 @@
+name: gemini-companion
+version: "0.1.0"
+description: "Direct Google Gemini API tools for Hermes Agent"
+provides_tools:
+  - gemini_status
+  - gemini_consult
+  - gemini_list_models
